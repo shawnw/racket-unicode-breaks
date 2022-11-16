@@ -72,56 +72,77 @@
       [(= (- end i) 1) (+ len 1)] ; WB2
       [else
        (let ([ch (string-ref str i)]
+             [orig-i i]
              [next (string-ref str (+ i 1))])
          (cond
-           [(and (CR? ch) (LF? next)) (+ len 2)] ; WB3
-           [(and (or (Newline? ch) (CR? ch) (LF? ch))
-                 (or (Newline? next) (CR? next) (LF? next))) (+ len 1)] ; WB3a, b
+           [(and (CR? ch) (LF? next))
+            (loop (+ i 1) (+ len 1))] ; WB3
+           [(or (or (Newline? ch) (CR? ch) (LF? ch))
+                (or (Newline? next) (CR? next) (LF? next)))
+            (+ len 1)] ; WB3a, b
            [(and (ZWJ? ch) (char-extended-pictographic? next))
             (loop (+ i 1) (+ len 1))] ; WB3c
            [(and (WSegSpace? ch) (WSegSpace? next))
             (loop (+ i 1) (+ len 1))] ; WB3d
-           [(or (Extend? next) (Format? next) (ZWJ? next))
-            (loop (string-skip str (lambda (ch) (or (Extend? ch) (Format? ch) (ZWJ? ch))) (+ i 1) end) (+ len 1))] ; WB4
-           [(and (AHLetter? ch) (AHLetter? next))
-            (loop (+ i 1) (+ len 1))] ; WB5
-           [(and (AHLetter? ch)
-                 (or (MidLetter? next) (MidNumLetQ? next))
-                 (and (< (+ i 2) end) (AHLetter? (string-ref str (+ i 2)))))
-            (loop (+ i 2) (+ len 2))] ; WB6, 7
-           [(and (Hebrew_Letter? ch) (Single_Quote? next))
-            (loop (+ i 1) (+ len 1))] ; WB7a
-           [(and (Hebrew_Letter? ch)
-                 (Double_Quote? next)
-                 (and (< (+ i 2) end) (Hebrew_Letter? (string-ref str (+ i 2)))))
-            (loop (+ i 2) (+ len 2))] ; WB7b, c
-           [(and (Numeric? ch) (Numeric? next))
-            (loop (+ i 1) (+ len 1))] ; WB8
-           [(and (AHLetter? ch) (Numeric? next))
-            (loop (+ i 1) (+ len 1))] ; WB9
-           [(and (Numeric? ch) (AHLetter? next))
-            (loop (+ i 1) (+ len 1))] ; WB10
-           [(and (Numeric? ch)
-                 (or (MidNum? next) (MidNumLetQ? next))
-                 (and (< (+ i 2) end) (Numeric? (string-ref str (+ i 2)))))
-            (loop (+ i 2) (+ len 2))] ; WB11, 12
-           [(and (Katakana? ch) (Katakana? next))
-            (loop (+ i 1) (+ len 1))] ; WB13
-           [(and (or (AHLetter? ch) (Numeric? ch) (Katakana? ch) (ExtendNumLet? ch))
-                 (ExtendNumLet? next))
-            (loop (+ i 1) (+ len 1))] ; WB13a
-           [(and (ExtendNumLet? ch)
-                 (or (AHLetter? next) (Numeric? next) (Katakana? next)))
-            (loop (+ i 1) (+ len 1))] ; WB13b
-           [(and (= i start) (Regional_Indicator? ch))
-            (let ([ri-end (string-skip Regional_Indicator? str i end)])
-              (loop ri-end (+ len (- ri-end i))))] ; WB15
-           [(and (not (Regional_Indicator? ch))
-                 (Regional_Indicator? next))
-            (let ([ri-end (string-skip Regional_Indicator? str (+ i 1) end)])
-              (loop ri-end (+ len (- ri-end i))))] ; WB16
-           [else (+ len 1)]))])))
-  
+           [else
+            (let ([new-next-idx (string-skip str (lambda (c) (or (Extend? c) (Format? c) (ZWJ? c))) (+ i 1) end)]) ; WB4
+              ;(printf "Before: i = ~S ch = ~S len = ~S next = ~S new-next-idx = ~S~%" i ch len next new-next-idx)
+              (if new-next-idx
+                  (let ([len (+ len (- new-next-idx i 1))]
+                        [i (- new-next-idx 1)]
+                        [next (string-ref str new-next-idx)]
+                        [third-idx (string-skip str (lambda (c) (or (Extend? c) (Format? c) (ZWJ? c))) (+ new-next-idx 1) end)])
+                    ;(printf "After: i = ~S ch = ~S len = ~S next = ~S third-idx = ~S~%" i ch len next third-idx)
+                    (cond                     
+                      [(and (AHLetter? ch) (AHLetter? next))
+                       (loop (+ i 1) (+ len 1))] ; WB5
+                      [(and (AHLetter? ch)
+                            (or (MidLetter? next) (MidNumLetQ? next))
+                            (and third-idx (AHLetter? (string-ref str third-idx))))
+                       (loop third-idx (+ len (- third-idx i)))] ; WB6, 7
+                      [(and (Hebrew_Letter? ch) (Single_Quote? next))
+                       (loop (+ i 1) (+ len 1))] ; WB7a
+                      [(and (Hebrew_Letter? ch)
+                            (Double_Quote? next)
+                            (and third-idx (Hebrew_Letter? (string-ref str third-idx))))
+                       (loop third-idx (+ len (- third-idx i)))] ; WB7b, c
+                      [(and (Numeric? ch) (Numeric? next))
+                       (loop (+ i 1) (+ len 1))] ; WB8
+                      [(and (AHLetter? ch) (Numeric? next))
+                       (loop (+ i 1) (+ len 1))] ; WB9
+                      [(and (Numeric? ch) (AHLetter? next))
+                       (loop (+ i 1) (+ len 1))] ; WB10
+                      [(and (Numeric? ch)
+                            (or (MidNum? next) (MidNumLetQ? next))
+                            (and third-idx (Numeric? (string-ref str third-idx))))
+                       (loop third-idx (+ len (- third-idx i)))] ; WB11, 12
+                      [(and (Katakana? ch) (Katakana? next))
+                       (loop (+ i 1) (+ len 1))] ; WB13
+                      [(and (or (AHLetter? ch) (Numeric? ch) (Katakana? ch) (ExtendNumLet? ch))
+                            (ExtendNumLet? next))
+                       (loop (+ i 1) (+ len 1))] ; WB13a
+                      [(and (ExtendNumLet? ch)
+                            (or (AHLetter? next) (Numeric? next) (Katakana? next)))
+                       (loop (+ i 1) (+ len 1))] ; WB13b
+                      [(and (= orig-i start) (Regional_Indicator? ch) (Regional_Indicator? next))
+                       (let ([next-non-ri (string-skip str Regional_Indicator? (+ i 2) end)])
+                         (if next-non-ri
+                             (if (even? (- next-non-ri i))
+                                 (loop (- next-non-ri 1) (+ len (- next-non-ri i 1)))
+                                 (loop (- next-non-ri 2) (+ len (- next-non-ri i 2))))
+                             (+ len (- end i))))] ; WB15
+                      [(and (not (Regional_Indicator? ch))
+                            (Regional_Indicator? next)
+                            (and third-idx (Regional_Indicator? (string-ref str third-idx))))
+                       (let ([next-non-ri (string-skip str Regional_Indicator? (+ third-idx 1) end)])
+                         (if next-non-ri
+                             (if (odd? (- next-non-ri i))
+                                 (loop (- next-non-ri 1) (+ len (- next-non-ri i 1)))
+                                 (loop (- next-non-ri 2) (+ len (- next-non-ri i 2))))
+                             (+ len (- end i))))] ; WB16
+                      [else (+ len 1)])) ; WB999
+                  (+ len (- end i))))]))])))
+
 (define (in-words str [start 0] [end (string-length str)] #:skip-blanks? [skip-blanks? #f])
   (let ([end-pos (+ start (string-word-span str start end))])
     (make-do-sequence
@@ -149,7 +170,7 @@
   (let loop ([i start]
              [indexes '()])
     (if (>= i end)
-        (cdr (reverse indexes))
+        (reverse (cons end indexes))
         (loop (+ i (string-word-span str i end)) (cons i indexes)))))
   
 (module+ test
@@ -168,10 +189,13 @@
   (test-equal? "indexes pure ascii"
                (string-grapheme-indexes pure-ascii)
                '((0 . 1) (1 . 2) (2 . 3) (3 . 4) (4 . 6)))
+
+  ;; Some basic tests. More in private/wordbreak-tests.rkt
+  (define some-words "The quick (“brown”) fox can’t jump 32.3 feet, right?")
   (test-equal? "words with spaces"
-               (string-split-words  "The quick (“brown”) fox can’t jump 32.3 feet, right?" #:skip-blanks? #f)
+               (string-split-words some-words #:skip-blanks? #f)
                '("The" " " "quick" " " "(" "“" "brown" "”" ")" " " "fox" " " "can’t" " " "jump" " " "32.3" " " "feet" "," " " "right" "?"))
   (test-equal? "words without spaces"
-               (string-split-words  "The quick (“brown”) fox can’t jump 32.3 feet, right?" #:skip-blanks? #t)
+               (string-split-words some-words #:skip-blanks? #t)
                '("The" "quick" "(" "“" "brown" "”" ")" "fox" "can’t" "jump" "32.3" "feet" "," "right" "?"))
   )

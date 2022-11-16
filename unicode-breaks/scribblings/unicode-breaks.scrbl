@@ -76,7 +76,7 @@ Same as @code{string-split-words}, but returns immutable strings.
 @defproc[(string-word-break-indexes [str string?] [start exact-nonnegative-integer? 0] [end exact-nonnegative-integer? (string-length str)])
          (listof exact-nonnegative-integer?)]{
 
-Returns a list of the indexes of each word break in the specified range of @code{str}. The implicit breaks at the beginning and end of the string are not included.
+Returns a list of the indexes of each word break in the specified range of @code{str}. The implicit breaks at the beginning and end of the string @emph{are} included.
 
 }
 
