@@ -131,7 +131,7 @@
         (lambda (pos)
           (let loop ([new-pos end-pos])
             (set! end-pos (+ end-pos (string-word-span str end-pos end)))
-            (if (and skip-blanks? (regexp-match? #px"^\\s+$" str new-pos end-pos))
+            (if (and skip-blanks? (regexp-match? #px"^\\p{Z}+$" str new-pos end-pos))
                 (loop end-pos)
                 new-pos)))
         start
