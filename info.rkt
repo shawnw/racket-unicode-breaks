@@ -7,4 +7,4 @@
 (define version "0.14.1") ; Major.Unicode-Version.Minor
 (define pkg-authors '(shawnw))
 (define license '(Apache-2.0 OR MIT))
-(define test-omit-paths '(#rx"scripts" #rx"private" #rx"scribblings"))
+(define test-omit-paths '(#rx"scripts" #rx"scribblings"))
