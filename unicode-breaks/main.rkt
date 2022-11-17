@@ -62,9 +62,13 @@
 ;;; Word breaks
 ;; TODO: Look into building a state machine to handle word boundaries instead of a huge cond
 
-(define (AHLetter? cat) (or (eq? 'ALetter cat) (eq? 'Hebrew_Letter cat)))
-(define (MidNumLetQ? cat) (or (eq? 'MidNumLet cat) (eq? 'Single_Quote cat)))
+(define (AHLetter? cat) (or (eq? cat 'ALetter) (eq? cat 'Hebrew_Letter)))
+(define (MidNumLetQ? cat) (or (eq? cat 'MidNumLet) (eq? cat 'Single_Quote)))
+
 (define (Regional_Indicator? ch) (eq? (char-word-break-property ch) 'Regional_Indicator))
+(define (Regional_Indicator/EFZ? ch)
+  (let ([cat (char-word-break-property ch)])
+    (or (eq? cat 'Regional_Indicator) (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'ZWJ))))
 
 (define (EFZ? ch)
   (let ([cat (char-word-break-property ch)])
@@ -88,13 +92,13 @@
           [(and (eq? before 'ZWJ) (char-extended-pictographic? after-ch)) #f] ; WB3c
           [(and (eq? before 'WSegSpace) (eq? after 'WSegSpace)) #f] ; WB3d
           [(or (eq? after 'Format) (eq? after 'Extend) (eq? after 'ZWJ)) #f] ; WB4
-          [else           
+          [else
            (let* ([before-idx (prev-non-ef-idx str i start)] ; WB4 ignore rules
                   [before-ch (if before-idx (string-ref str before-idx) before-ch)]
-                  [before (if before-idx (char-word-break-property before-ch) before)]
+                  [before (if (and before-idx (not (= before-idx (- i 1)))) (char-word-break-property before-ch) before)]
                   [after-idx (next-non-ef-idx str i end)]
                   [after-ch (and after-idx (string-ref str after-idx))]
-                  [after (and after-ch (char-word-break-property after-ch))]
+                  [after (if (and after-ch (not (= after-idx i))) (char-word-break-property after-ch) after)]
                   [next-before-idx (and before-idx (>= (- before-idx 1) start) (prev-non-ef-idx str before-idx start))]
                   [next-before-ch (and next-before-idx (string-ref str next-before-idx))]
                   [next-before (and next-before-ch (char-word-break-property next-before-ch))]
@@ -104,7 +108,7 @@
              #;(printf "next-before-idx: ~S next-before-ch: ~S next-before: ~S~%before-idx: ~S before-ch: ~S before: ~S~%after-idx: ~S after-ch: ~S after: ~S~%next-after-idx: ~S next-after-ch: ~S next-after: ~S~%"
                      next-before-idx next-before-ch next-before before-idx before-ch before after-idx after-ch after next-after-idx next-after-ch next-after)
              (cond
-               [(not (and before after)) #f]
+               ;[(not (and before after)) #f]
                [(and (AHLetter? before) (AHLetter? after)) #f] ; WB5
                [(and (AHLetter? before)
                      (or (eq? after 'MidLetter) (MidNumLetQ? after))
@@ -133,15 +137,15 @@
                      (eq? after 'ExtendNumLet)) #f] ; WB13a
                [(and (eq? before 'ExtendNumLet)
                      (or (AHLetter? after) (eq? after 'Numeric) (eq? after 'Katakana))) #f] ; WB13b
-               [(and (eq? before 'Regional_Indicator) (eq? after 'Regional_Indicator))
-                ; Find out how many Regional_Indicator characters exist before the point
-                (let ([first-non-ri (string-skip-right str Regional_Indicator? start after-idx)])
-                  (if first-non-ri
-                      (even? (- after-idx first-non-ri)) ; WB16
-                      (even? (- after-idx start))))] ; WB15
+               [(and (eq? before 'Regional_Indicator) (eq? after 'Regional_Indicator)
+                     ; Find out how many Regional_Indicator characters exist before the point
+                     (let ([first-non-ri (string-skip-right str Regional_Indicator/EFZ? start after-idx)])
+                       (if first-non-ri
+                           (odd? (string-count str Regional_Indicator? (+ first-non-ri 1) after-idx))
+                           (odd? (string-count str Regional_Indicator? start after-idx))))) #f] ; WB15, 16
                [else #t]))])))) ; WB999
 
-;; Like string-grapheme-span but for word breaks               
+;; Like string-grapheme-span but for word breaks
 (define (string-word-span str start [end (string-length str)])
   (let ([first-break (for/first ([i (in-range (+ start 1) end)]
                                  #:when (string-word-break-at? str i start end))
@@ -182,7 +186,7 @@
   (for/list ([i (in-inclusive-range start end)]
              #:when (string-word-break-at? str i start end))
     i))
-  
+
 (module+ test
   (define pure-ascii "abcd\r\n")
   (define mixed "abc\u0308d \u1100\u1161\u11A8")
