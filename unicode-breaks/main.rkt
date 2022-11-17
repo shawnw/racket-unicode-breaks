@@ -16,6 +16,7 @@
   [string-grapheme-indexes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof (cons/c exact-nonnegative-integer? exact-nonnegative-integer?)))]
 
   [char-word-break-property (-> char? (or/c 'ALetter 'CR 'Double_Quote 'Extend 'ExtendNumLet 'Format 'Hebrew_Letter 'Katakana 'LF 'MidLetter 'MidNum 'MidNumLet 'Newline 'Numeric 'Other 'Regional_Indicator 'Single_Quote 'WSegSpace 'ZWJ))]
+  [string-word-break-at? (->* (string? exact-nonnegative-integer?) (exact-nonnegative-integer? exact-nonnegative-integer?) boolean?)]
   [string-word-span (->* (string? exact-nonnegative-integer?) (exact-nonnegative-integer?) exact-nonnegative-integer?)]
   [in-words (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer? #:skip-blanks? any/c) (sequence/c string?))]
   [string-split-words (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer? #:skip-blanks? any/c) (listof string?))]

@@ -45,12 +45,19 @@ Returns a list of the indexes of each grapheme in the specified range of @code{s
 
 @section{Word Breaks}
 
-@defproc[(char-word-break-property char?)
+@defproc[(char-word-break-property [ch char?])
          (or/c 'ALetter 'CR 'Double_Quote 'Extend 'ExtendNumLet 'Format 'Hebrew_Letter 'Katakana 'LF 'MidLetter 'MidNum 'MidNumLet 'Newline 'Numeric 'Other 'Regional_Indicator 'Single_Quote 'WSegSpace 'ZWJ)]{
 
  Returns the Unicode word break property of the given character.
 
  }
+
+@defproc[(string-word-break-at? [str string?] [i exact-nonnegative-integer?] [start exact-nonnegative-integer? 0] [end exact-nonnegative-integer? (string-length str)])
+         boolean?]{
+
+ Returns @code{#t} if a word break exists before the character at index @code{i}. There is always a break before @code{start} and @code{end}.
+
+}
 
 
 @defproc[(string-word-span [str string?] [start exact-nonnegative-integer?] [end exact-nonnegative-integer? (string-length str)])
