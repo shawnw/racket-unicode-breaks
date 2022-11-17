@@ -2,45 +2,26 @@
 ;;; Reads WordBreakProperty.txt and outputs racket source to ../unicode-breaks/private/word-break-categories.rkt
 ;;; Only needed when updating to a new Unicode version. (Maybe should make it run automatically when installing the package?)
 
-(require (prefix-in is- data/integer-set) racket/syntax net/url)
+(require (prefix-in is- data/integer-set) racket/syntax net/url "common.rkt")
 
 (define word-break-properties-url (string->url "https://www.unicode.org/Public/14.0.0/ucd/auxiliary/WordBreakProperty.txt"))
-
-(struct char-range (lower upper category) #:prefab)
+(define word-break-properties-file (string->path "WordBreakProperty.txt"))
+(define destination-source-file (string->path "../unicode-breaks/private/word-break-categories.rkt"))
 
 (define (build-word-break-tables)
-  (define tables
-    (for/fold ([tables (hasheq)])
-              ([line (in-lines)])
-      (cond
-        [(regexp-match #px"^([[:xdigit:]]{4,6})\\s+;\\s+([[:word:]]+)" line)
-         => (lambda (match-data)
-              (hash-update tables (string->symbol (third match-data))
-                           (lambda (cps) (is-union cps (is-make-range (string->number (second match-data) 16))))
-                           is-make-range))]
-        [(regexp-match #px"^([[:xdigit:]]{4,6})\\.\\.([[:xdigit:]]{4,6})\\s+;\\s+([[:word:]]+)" line)
-         => (lambda (match-data)
-              (hash-update tables (string->symbol (fourth match-data))
-                           (lambda (cps) (is-union cps (is-make-range (string->number (second match-data) 16) (string->number (third match-data) 16))))
-                           is-make-range))]
-        [else tables])))
+  (define tables (read-unicode-tables))
   (displayln "#lang racket/base")
   (displayln "; Auto-generated file. Do not edit")
   (pretty-write '(require srfi/43 racket/unsafe/ops))
   (pretty-write '(provide char-word-break-property word-break-properties))
   (pretty-write '(struct char-range (lower upper category) #:prefab))
   (pretty-write '(define (compare-range range ch)
-                       (cond
-                         [(unsafe-char<=? (char-range-lower range) ch (char-range-upper range)) 0]
-                         [(unsafe-char<? (char-range-lower range) ch) -1]
-                         [else 1])))
+                   (cond
+                     [(unsafe-char<=? (char-range-lower range) ch (char-range-upper range)) 0]
+                     [(unsafe-char<? (char-range-lower range) ch) -1]
+                     [else 1])))
   (pretty-write `(define word-break-properties (quote ,(sort (cons 'Other (hash-keys tables)) symbol<?))))
-  (define all-values
-    (for*/vector
-        ([(category cps) (in-hash tables)]
-         [range (in-list (is-integer-set-contents cps))])
-      (char-range (integer->char (car range)) (integer->char (cdr range)) category)))
-  (vector-sort! all-values (lambda (a b) (char<? (char-range-upper a) (char-range-lower b))))
+  (define all-values (unicode-tables->vector tables))
   (pretty-write `(define word-break-table (quote ,all-values)))
   (pretty-write '(define (char-word-break-property ch)
                    (let ([idx (vector-binary-search word-break-table ch compare-range)])
@@ -49,11 +30,4 @@
                          (quote Other))))))
 
 (module+ main
-  (call/input-url
-   word-break-properties-url
-   get-pure-port
-   (lambda (in-port)
-     (parameterize ([pretty-print-columns 80]
-                    [current-input-port in-port])
-       (with-output-to-file "../unicode-breaks/private/word-break-categories.rkt" #:exists 'replace
-         build-word-break-tables)))))
+  (create-source-file word-break-properties-url word-break-properties-file destination-source-file build-word-break-tables))
