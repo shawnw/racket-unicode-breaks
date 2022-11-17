@@ -15,6 +15,8 @@
   [string-split-graphemes/immutable (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof (and/c string? immutable?)))]
   [string-grapheme-indexes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof (cons/c exact-nonnegative-integer? exact-nonnegative-integer?)))]
 
+  [char-word-break-property (-> char? (or/c 'ALetter 'CR 'Double_Quote 'Extend 'ExtendNumLet 'Format 'Hebrew_Letter 'Katakana 'LF 'MidLetter 'MidNum 'MidNumLet 'Newline 'Numeric 'Other 'Regional_Indicator 'Single_Quote 'WSegSpace 'ZWJ))]
+  [string-word-break-at? (->* (string? exact-nonnegative-integer?) (exact-nonnegative-integer? exact-nonnegative-integer?) boolean?)]
   [string-word-span (->* (string? exact-nonnegative-integer?) (exact-nonnegative-integer?) exact-nonnegative-integer?)]
   [in-words (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer? #:skip-blanks? any/c) (sequence/c string?))]
   [string-split-words (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer? #:skip-blanks? any/c) (listof string?))]
@@ -60,82 +62,117 @@
 ;;; Word breaks
 ;; TODO: Look into building a state machine to handle word boundaries instead of a huge cond
 
-(define (AHLetter? ch) (or (ALetter? ch) (Hebrew_Letter? ch)))
-(define (MidNumLetQ? ch) (or (MidNumLet? ch) (Single_Quote? ch)))
+(define (AHLetter? cat) (or (eq? cat 'ALetter) (eq? cat 'Hebrew_Letter)))
+(define (MidNumLetQ? cat) (or (eq? cat 'MidNumLet) (eq? cat 'Single_Quote)))
+
+(define (Regional_Indicator? ch) (eq? (char-word-break-property ch) 'Regional_Indicator))
+(define (Regional_Indicator/EFZ? ch)
+  (let ([cat (char-word-break-property ch)])
+    (or (eq? cat 'Regional_Indicator) (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'ZWJ))))
+
+(define (EFZ? ch)
+  (let ([cat (char-word-break-property ch)])
+    (or (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'ZWJ))))
+
+(define (next-non-ef-idx str i end) (string-skip str EFZ? i end))
+(define (prev-non-ef-idx str i start) (string-skip-right str EFZ? start i))
+
+;; #t if there's a word break before the character at index i
+(define (string-word-break-at? str i [start 0] [end (string-length str)])
+  (if (or (= i start) (= i end))
+      #t; WB1,2
+      (let* ([before-ch (string-ref str (- i 1))]
+             [before (char-word-break-property before-ch)]
+             [after-ch (string-ref str i)]
+             [after (char-word-break-property after-ch)])
+        (cond
+          [(and (eq? before 'CR) (eq? after 'LF)) #f] ; WB3
+          [(or (or (eq? before 'Newline) (eq? before 'CR) (eq? before 'LF))
+               (or (eq? after 'Newline) (eq? after 'CR) (eq? after 'LF))) #t] ; WB3a,b
+          [(and (eq? before 'ZWJ) (char-extended-pictographic? after-ch)) #f] ; WB3c
+          [(and (eq? before 'WSegSpace) (eq? after 'WSegSpace)) #f] ; WB3d
+          [(or (eq? after 'Format) (eq? after 'Extend) (eq? after 'ZWJ)) #f] ; WB4
+          [else
+           (let* ([before-idx (prev-non-ef-idx str i start)] ; WB4 ignore rules
+                  [before-ch (if before-idx (string-ref str before-idx) before-ch)]
+                  [before (if (and before-idx (not (= before-idx (- i 1)))) (char-word-break-property before-ch) before)]
+                  [after-idx (next-non-ef-idx str i end)]
+                  [after-ch (and after-idx (string-ref str after-idx))]
+                  [after (if (and after-ch (not (= after-idx i))) (char-word-break-property after-ch) after)]
+                  [next-before-idx (and before-idx (>= (- before-idx 1) start) (prev-non-ef-idx str before-idx start))]
+                  [next-before-ch (and next-before-idx (string-ref str next-before-idx))]
+                  [next-before (and next-before-ch (char-word-break-property next-before-ch))]
+                  [next-after-idx (and (< (+ after-idx 1) end) (next-non-ef-idx str (+ after-idx 1) end))]
+                  [next-after-ch (and next-after-idx (string-ref str next-after-idx))]
+                  [next-after (and next-after-ch (char-word-break-property next-after-ch))])
+             #;(printf "next-before-idx: ~S next-before-ch: ~S next-before: ~S~%before-idx: ~S before-ch: ~S before: ~S~%after-idx: ~S after-ch: ~S after: ~S~%next-after-idx: ~S next-after-ch: ~S next-after: ~S~%"
+                     next-before-idx next-before-ch next-before before-idx before-ch before after-idx after-ch after next-after-idx next-after-ch next-after)
+             (cond
+               ;[(not (and before after)) #f]
+               [(and (AHLetter? before) (AHLetter? after)) #f] ; WB5
+               [(and (AHLetter? before)
+                     (or (eq? after 'MidLetter) (MidNumLetQ? after))
+                     (AHLetter? next-after)) #f] ; WB6
+               [(and (AHLetter? next-before)
+                     (or (eq? before 'MidLetter) (MidNumLetQ? before))
+                     (AHLetter? after)) #f] ; WB7
+               [(and (eq? before 'Hebrew_Letter) (eq? after 'Single_Quote)) #f] ; WB7a
+               [(and (eq? before 'Hebrew_Letter)
+                     (eq? after 'Double_Quote)
+                     (eq? next-after 'Hebrew_Letter)) #f] ; WB7b
+               [(and (eq? next-before 'Hebrew_Letter)
+                     (eq? before 'Double_Quote)
+                     (eq? after 'Hebrew_Letter)) #f] ; WB7c
+               [(and (eq? before 'Numeric) (eq? after 'Numeric)) #f] ; WB8
+               [(and (AHLetter? before) (eq? after 'Numeric)) #f] ; WB9
+               [(and (eq? before 'Numeric) (AHLetter? after)) #f] ; WB10
+               [(and (eq? next-before 'Numeric)
+                     (or (eq? before 'MidNum) (MidNumLetQ? before))
+                     (eq? after 'Numeric)) #f] ; WB11
+               [(and (eq? before 'Numeric)
+                     (or (eq? after 'MidNum) (MidNumLetQ? after))
+                     (eq? next-after 'Numeric)) #f] ; WB12
+               [(and (eq? before 'Katakana) (eq? after 'Katakana)) #f] ; WB13
+               [(and (or (AHLetter? before) (eq? before 'Numeric) (eq? before 'Katakana) (eq? before 'ExtendNumLet))
+                     (eq? after 'ExtendNumLet)) #f] ; WB13a
+               [(and (eq? before 'ExtendNumLet)
+                     (or (AHLetter? after) (eq? after 'Numeric) (eq? after 'Katakana))) #f] ; WB13b
+               [(and (eq? before 'Regional_Indicator) (eq? after 'Regional_Indicator)
+                     ; Find out how many Regional_Indicator characters exist before the point
+                     (let ([first-non-ri (string-skip-right str Regional_Indicator/EFZ? start after-idx)])
+                       (if first-non-ri
+                           (odd? (string-count str Regional_Indicator? (+ first-non-ri 1) after-idx))
+                           (odd? (string-count str Regional_Indicator? start after-idx))))) #f] ; WB15, 16
+               [else #t]))])))) ; WB999
 
 ;; Like string-grapheme-span but for word breaks
 (define (string-word-span str start [end (string-length str)])
-  (let loop ([i start]
-             [len 0])
-    (cond
-      [(= i end) len] ; WB1
-      [(= (- end i) 1) (+ len 1)] ; WB2
-      [else
-       (let ([ch (string-ref str i)]
-             [next (string-ref str (+ i 1))])
-         (cond
-           [(and (CR? ch) (LF? next)) (+ len 2)] ; WB3
-           [(and (or (Newline? ch) (CR? ch) (LF? ch))
-                 (or (Newline? next) (CR? next) (LF? next))) (+ len 1)] ; WB3a, b
-           [(and (ZWJ? ch) (char-extended-pictographic? next))
-            (loop (+ i 1) (+ len 1))] ; WB3c
-           [(and (WSegSpace? ch) (WSegSpace? next))
-            (loop (+ i 1) (+ len 1))] ; WB3d
-           [(or (Extend? next) (Format? next) (ZWJ? next))
-            (loop (string-skip str (lambda (ch) (or (Extend? ch) (Format? ch) (ZWJ? ch))) (+ i 1) end) (+ len 1))] ; WB4
-           [(and (AHLetter? ch) (AHLetter? next))
-            (loop (+ i 1) (+ len 1))] ; WB5
-           [(and (AHLetter? ch)
-                 (or (MidLetter? next) (MidNumLetQ? next))
-                 (and (< (+ i 2) end) (AHLetter? (string-ref str (+ i 2)))))
-            (loop (+ i 2) (+ len 2))] ; WB6, 7
-           [(and (Hebrew_Letter? ch) (Single_Quote? next))
-            (loop (+ i 1) (+ len 1))] ; WB7a
-           [(and (Hebrew_Letter? ch)
-                 (Double_Quote? next)
-                 (and (< (+ i 2) end) (Hebrew_Letter? (string-ref str (+ i 2)))))
-            (loop (+ i 2) (+ len 2))] ; WB7b, c
-           [(and (Numeric? ch) (Numeric? next))
-            (loop (+ i 1) (+ len 1))] ; WB8
-           [(and (AHLetter? ch) (Numeric? next))
-            (loop (+ i 1) (+ len 1))] ; WB9
-           [(and (Numeric? ch) (AHLetter? next))
-            (loop (+ i 1) (+ len 1))] ; WB10
-           [(and (Numeric? ch)
-                 (or (MidNum? next) (MidNumLetQ? next))
-                 (and (< (+ i 2) end) (Numeric? (string-ref str (+ i 2)))))
-            (loop (+ i 2) (+ len 2))] ; WB11, 12
-           [(and (Katakana? ch) (Katakana? next))
-            (loop (+ i 1) (+ len 1))] ; WB13
-           [(and (or (AHLetter? ch) (Numeric? ch) (Katakana? ch) (ExtendNumLet? ch))
-                 (ExtendNumLet? next))
-            (loop (+ i 1) (+ len 1))] ; WB13a
-           [(and (ExtendNumLet? ch)
-                 (or (AHLetter? next) (Numeric? next) (Katakana? next)))
-            (loop (+ i 1) (+ len 1))] ; WB13b
-           [(and (= i start) (Regional_Indicator? ch))
-            (let ([ri-end (string-skip Regional_Indicator? str i end)])
-              (loop ri-end (+ len (- ri-end i))))] ; WB15
-           [(and (not (Regional_Indicator? ch))
-                 (Regional_Indicator? next))
-            (let ([ri-end (string-skip Regional_Indicator? str (+ i 1) end)])
-              (loop ri-end (+ len (- ri-end i))))] ; WB16
-           [else (+ len 1)]))])))
-  
+  (let ([first-break (for/first ([i (in-range (+ start 1) end)]
+                                 #:when (string-word-break-at? str i start end))
+                       i)])
+    (if first-break
+        (- first-break start)
+        (- end start))))
+
+(define (skip-whitespace-only-segments str word-breaks)
+  (cond
+    [(< (length word-breaks) 2) '()]
+    [(regexp-match? #px"^\\p{Z}+$" str (car word-breaks) (cadr word-breaks))
+     (skip-whitespace-only-segments str (cdr word-breaks))]
+    [else word-breaks]))
+
 (define (in-words str [start 0] [end (string-length str)] #:skip-blanks? [skip-blanks? #f])
-  (let ([end-pos (+ start (string-word-span str start end))])
+  (let* ([str (string->immutable-string str)]
+         [initial-word-breaks (if skip-blanks?
+                                  (skip-whitespace-only-segments str (string-word-break-indexes str start end))
+                                  (string-word-break-indexes str start end))])
     (make-do-sequence
      (lambda ()
        (values
-        (lambda (start-pos) (substring str start-pos end-pos))
-        (lambda (pos)
-          (let loop ([new-pos end-pos])
-            (set! end-pos (+ end-pos (string-word-span str end-pos end)))
-            (if (and skip-blanks? (regexp-match? #px"^\\s+$" str new-pos end-pos))
-                (loop end-pos)
-                new-pos)))
-        start
-        (lambda (pos) (< pos end))
+        (lambda (word-breaks) (substring str (car word-breaks) (cadr word-breaks)))
+        (lambda (word-breaks) (if skip-blanks? (skip-whitespace-only-segments str (cdr word-breaks)) (cdr word-breaks)))
+        initial-word-breaks
+        (lambda (word-breaks) (>= (length word-breaks) 2))
         #f
         #f)))))
 
@@ -146,12 +183,10 @@
   (map unsafe-string->immutable-string! (sequence->list (in-words str start end #:skip-blanks? skip-blanks?))))
 
 (define (string-word-break-indexes str [start 0] [end (string-length str)])
-  (let loop ([i start]
-             [indexes '()])
-    (if (>= i end)
-        (cdr (reverse indexes))
-        (loop (+ i (string-word-span str i end)) (cons i indexes)))))
-  
+  (for/list ([i (in-inclusive-range start end)]
+             #:when (string-word-break-at? str i start end))
+    i))
+
 (module+ test
   (define pure-ascii "abcd\r\n")
   (define mixed "abc\u0308d \u1100\u1161\u11A8")
@@ -168,10 +203,13 @@
   (test-equal? "indexes pure ascii"
                (string-grapheme-indexes pure-ascii)
                '((0 . 1) (1 . 2) (2 . 3) (3 . 4) (4 . 6)))
+
+  ;; Some basic tests. More in private/wordbreak-tests.rkt
+  (define some-words "The quick (“brown”) fox can’t jump 32.3 feet, right?")
   (test-equal? "words with spaces"
-               (string-split-words  "The quick (“brown”) fox can’t jump 32.3 feet, right?" #:skip-blanks? #f)
+               (string-split-words some-words #:skip-blanks? #f)
                '("The" " " "quick" " " "(" "“" "brown" "”" ")" " " "fox" " " "can’t" " " "jump" " " "32.3" " " "feet" "," " " "right" "?"))
   (test-equal? "words without spaces"
-               (string-split-words  "The quick (“brown”) fox can’t jump 32.3 feet, right?" #:skip-blanks? #t)
+               (string-split-words some-words #:skip-blanks? #t)
                '("The" "quick" "(" "“" "brown" "”" ")" "fox" "can’t" "jump" "32.3" "feet" "," "right" "?"))
   )
