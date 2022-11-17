@@ -6,6 +6,8 @@
 
 (define word-break-properties-url (string->url "https://www.unicode.org/Public/14.0.0/ucd/auxiliary/WordBreakProperty.txt"))
 
+(struct char-range (lower upper category) #:prefab)
+
 (define (build-word-break-tables)
   (define tables
     (for/fold ([tables (hasheq)])
@@ -26,45 +28,26 @@
   (displayln "#lang racket/base")
   (displayln "; Auto-generated file. Do not edit")
   (pretty-write '(require srfi/43 racket/unsafe/ops))
-  (pretty-write `(provide ,@(map make-predicate (hash-keys tables #t))))
-  (pretty-write '(define (search-range range cp)
-                   (cond
-                     [(unsafe-fx<= (car range) cp (cdr range)) 0]
-                     [(unsafe-fx< (car range) cp) -1]
-                     [else 1])))
-  (pretty-write '(define (search-chars c1 c2)
-                   (cond
-                     [(unsafe-char<? c1 c2) -1]
-                     [(unsafe-char=? c1 c2) 0]
-                     [else 1])))
-  (for ([category (in-list (hash-keys tables #t))])
-    (let* ([cps (hash-ref tables category)]
-           [len (is-count cps)])
-      (cond
-        ; If a category has a single character, test it directly.
-        [(= len 1)
-         (pretty-write `(define (,(make-predicate category) ch) (unsafe-char=? ch ,(integer->char (is-get-integer cps)))))]
-        ; Same for a single range pair
-        [(= (length (is-integer-set-contents cps)) 1)
-         (let ([range (is-integer-set-contents cps)])
-           (pretty-write `(define (,(make-predicate category) ch) (unsafe-char<=? ,(integer->char (caar range)) ch ,(integer->char (cdar range))))))] 
-        ; 20 or fewer codepoints, put them all in a vector and just use a linear search
-        [(<= len 20)
-         (pretty-write `(define ,(format-symbol "~A-table" category)
-                          ,(list->vector (is-foldr (lambda (cp acc) (cons (integer->char cp) acc)) '() cps))))
-         (pretty-write `(define (,(make-predicate category) ch)
-                          (vector-index (lambda (ch2) (unsafe-char=? ch ch2)) ,(format-symbol "~A-table" category))))]
-        ; 100 or fewer codepoints, put them all in a vector and binary search
-        [(<= len 100)
-         (pretty-write `(define ,(format-symbol "~A-table" category)
-                          ,(list->vector (is-foldr (lambda (cp acc) (cons (integer->char cp) acc)) '() cps))))
-         (pretty-write `(define (,(make-predicate category) ch)
-                          (vector-binary-search ,(format-symbol "~A-table" category) ch search-chars)))]
-        ; Otherwise use a vector of range pairs
-        [else
-         (pretty-write `(define ,(format-symbol "~A-table" category) ,(list->vector (is-integer-set-contents cps))))
-         (pretty-write `(define (,(make-predicate category) ch)
-                          (vector-binary-search ,(format-symbol "~A-table" category) (unsafe-char->integer ch) search-range)))]))))
+  (pretty-write '(provide char-word-break-property word-break-properties))
+  (pretty-write '(struct char-range (lower upper category) #:prefab))
+  (pretty-write '(define (compare-range range cp)
+                       (cond
+                         [(unsafe-char<=? (char-range-lower range) cp (char-range-upper range)) 0]
+                         [(unsafe-char<? (char-range-lower range) cp) -1]
+                         [else 1])))
+  (pretty-write `(define word-break-properties (quote ,(sort (cons 'Other (hash-keys tables)) symbol<?))))
+  (define all-values
+    (for*/vector ;#:length (for/fold ([sum 0]) ([cps (in-hash-values tables)]) (+ sum (is-count cps)))
+      ([(category cps) (in-hash tables)]
+       [range (in-list (is-integer-set-contents cps))])
+      (char-range (integer->char (car range)) (integer->char (cdr range)) category)))
+  (vector-sort! all-values (lambda (a b) (char<? (char-range-upper a) (char-range-lower b))))
+  (pretty-write `(define word-break-table (quote ,all-values)))
+  (pretty-write '(define (char-word-break-property ch)
+                   (let ([idx (vector-binary-search word-break-table ch compare-range)])
+                     (if idx
+                         (char-range-category (unsafe-vector-ref word-break-table idx))
+                         (quote Other))))))
 
 (module+ main
   (call/input-url
