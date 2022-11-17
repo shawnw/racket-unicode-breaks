@@ -28,7 +28,8 @@
 
 ;; Create a sequence of substrings, one grapheme per element
 (define (in-graphemes str [start 0] [end (string-length str)])
-  (let ([end-pos (+ start (string-grapheme-span str start end))])
+  (let* ([str (string->immutable-string str)]
+         [end-pos (+ start (string-grapheme-span str start end))])
     (make-do-sequence
      (lambda ()
        (values
