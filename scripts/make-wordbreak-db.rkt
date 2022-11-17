@@ -24,22 +24,21 @@
                            (lambda (cps) (is-union cps (is-make-range (string->number (second match-data) 16) (string->number (third match-data) 16))))
                            is-make-range))]
         [else tables])))
-  (define (make-predicate name) (format-symbol "~A?" name))
   (displayln "#lang racket/base")
   (displayln "; Auto-generated file. Do not edit")
   (pretty-write '(require srfi/43 racket/unsafe/ops))
   (pretty-write '(provide char-word-break-property word-break-properties))
   (pretty-write '(struct char-range (lower upper category) #:prefab))
-  (pretty-write '(define (compare-range range cp)
+  (pretty-write '(define (compare-range range ch)
                        (cond
-                         [(unsafe-char<=? (char-range-lower range) cp (char-range-upper range)) 0]
-                         [(unsafe-char<? (char-range-lower range) cp) -1]
+                         [(unsafe-char<=? (char-range-lower range) ch (char-range-upper range)) 0]
+                         [(unsafe-char<? (char-range-lower range) ch) -1]
                          [else 1])))
   (pretty-write `(define word-break-properties (quote ,(sort (cons 'Other (hash-keys tables)) symbol<?))))
   (define all-values
-    (for*/vector ;#:length (for/fold ([sum 0]) ([cps (in-hash-values tables)]) (+ sum (is-count cps)))
-      ([(category cps) (in-hash tables)]
-       [range (in-list (is-integer-set-contents cps))])
+    (for*/vector
+        ([(category cps) (in-hash tables)]
+         [range (in-list (is-integer-set-contents cps))])
       (char-range (integer->char (car range)) (integer->char (cdr range)) category)))
   (vector-sort! all-values (lambda (a b) (char<? (char-range-upper a) (char-range-lower b))))
   (pretty-write `(define word-break-table (quote ,all-values)))

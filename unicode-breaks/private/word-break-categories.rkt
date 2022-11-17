@@ -3,10 +3,10 @@
 (require srfi/43 racket/unsafe/ops)
 (provide char-word-break-property word-break-properties)
 (struct char-range (lower upper category) #:prefab)
-(define (compare-range range cp)
+(define (compare-range range ch)
   (cond
-   ((unsafe-char<=? (char-range-lower range) cp (char-range-upper range)) 0)
-   ((unsafe-char<? (char-range-lower range) cp) -1)
+   ((unsafe-char<=? (char-range-lower range) ch (char-range-upper range)) 0)
+   ((unsafe-char<? (char-range-lower range) ch) -1)
    (else 1)))
 (define word-break-properties
   '(ALetter
