@@ -13,7 +13,7 @@
   [in-graphemes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (sequence/c string?))]
   [string-split-graphemes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof string?))]
   [string-split-graphemes/immutable (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof (and/c string? immutable?)))]
-  [string-grapheme-indexes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof (cons/c exact-nonnegative-integer? exact-nonnegative-integer?)))]
+  [string-grapheme-indexes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof exact-nonnegative-integer?))]
 
   [char-word-break-property (-> char? symbol?)]
   [string-word-break-at? (->* (string? exact-nonnegative-integer?) (exact-nonnegative-integer? exact-nonnegative-integer?) boolean?)]
@@ -66,7 +66,7 @@
     (if (>= i end)
         (reverse indexes)
         (let ([j (string-grapheme-span str i end)])
-          (loop (+ i j) (cons (cons i (+ i j)) indexes))))))
+          (loop (+ i j) (cons i indexes))))))
 
 ;;; Word breaks
 ;; TODO: Look into building a state machine to handle word boundaries instead of a huge cond
@@ -319,7 +319,7 @@
                '("\u0308" "d"))
   (test-equal? "indexes pure ascii"
                (string-grapheme-indexes pure-ascii)
-               '((0 . 1) (1 . 2) (2 . 3) (3 . 4) (4 . 6)))
+               '(0 1 2 3 4))
 
   ;; Some basic tests. More in private/wordbreak-tests.rkt
   (define some-words "The quick (“brown”) fox can’t jump 32.3 feet, right?")

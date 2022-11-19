@@ -37,9 +37,11 @@ Same as @code{string-split-graphemes}, but returns immutable strings.
 }
 
 @defproc[(string-grapheme-indexes [str string?] [start exact-nonnegative-integer? 0] [end exact-nonnegative-integer? (string-length str)])
-         (listof (cons/c exact-nonnegative-integer? exact-nonnegative-integer?))]{
+         (listof exact-nonnegative-integer?)]{
 
-Returns a list of the indexes of each grapheme in the specified range of @code{str}. The @code{car} of each pair is the start index, and the @code{cdr} is one past the last codepoint in the grapheme, so that they can be used as the arguments of @code{substring} and other functions. It is undefined if @code{start} is not the initial index of a grapheme sequence.
+Returns a list of the starting indexes of each grapheme in the
+specified range of @code{str}. It is undefined if @code{start} is not
+the initial index of a grapheme sequence.
 
 }
 
