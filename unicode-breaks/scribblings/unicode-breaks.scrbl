@@ -45,10 +45,16 @@ Returns a list of the indexes of each grapheme in the specified range of @code{s
 
 @section{Word Breaks}
 
-@defproc[(char-word-break-property [ch char?])
-         (or/c 'ALetter 'CR 'Double_Quote 'Extend 'ExtendNumLet 'Format 'Hebrew_Letter 'Katakana 'LF 'MidLetter 'MidNum 'MidNumLet 'Newline 'Numeric 'Other 'Regional_Indicator 'Single_Quote 'WSegSpace 'ZWJ)]{
+@defproc[(char-word-break-property [ch char?] symbol?)]{
 
- Returns the Unicode word break property of the given character.
+ Returns the Unicode word break property of the given character, which
+ is one of the following symbols: @code{'ALetter}, @code{'CR},
+ @code{'Double_Quote}, @code{'Extend} @code{'ExtendNumLet},
+ @code{'Format}, @code{'Hebrew_Letter}, @code{'Katakana}, @code{'LF},
+ @code{'MidLetter}, @code{'MidNum}, @code{'MidNumLet},
+ @code{'Newline}, @code{'Numeric}, @code{'Other},
+ @code{'Regional_Indicator}, @code{'Single_Quote}, @code{'WSegSpace}
+ or @code{'ZWJ}.
 
  }
 
@@ -64,7 +70,7 @@ Returns a list of the indexes of each grapheme in the specified range of @code{s
          exact-nonnegative-integer?]{
 
 Returns the number of characters/codepoints in the string before the next Unicode word break starting from @code{start} and not going past @code{end}.
-                                                                                                           
+
 }
 
 @defproc[(in-words [str string?] [start exact-nonnegative-integer? 0] [end exact-nonnegative-integer? (string-length str)] [#:skip-blanks? skip-blanks? any/c #f])
@@ -97,4 +103,37 @@ Returns a list of the indexes of each word break in the specified range of @code
 
 @section{Sentence Breaks}
 
-Not yet implemented.
+@defproc[(char-sentence-break-property [ch char?]) symbol?]{
+
+Return the Unicode sentence break property of the given character, which is one of the following symbols:
+@code{'ATerm}, @code{'CR}, @code{'Close}, @code{'Extend}, @code{'Format}, @code{'LF}, @code{'Lower}, @code{'Numeric}, @code{'OLetter}, @code{'Other}, @code{'SContinue}, @code{'STerm}, @code{'Sep}, @code{'Sp} or @code{'Upper}.
+
+}
+
+@defproc[(in-sentences [str string?] [start exact-nonnegative-integer? 0] [end exact-nonnegative-integer? (string-length str)])
+         (sequence/c string?)]{
+
+Returns a sequence that produces a series of strings, one sentence in the specified range of @code{str} per entry. It is undefined if @code{start} is not the initial index of a sentence.
+
+}
+
+@defproc[(string-split-sentences [str string?] [start exact-nonnegative-integer? 0] [end exact-nonnegative-integer? (string-length str)])
+         (listof string?)]{
+
+Returns a list of the sentences of the specified range of @code{str}. It is undefined if @code{start} is not the initial index of a sentence.
+
+}
+
+@defproc[(string-split-sentencess/immutable [str string?] [start exact-nonnegative-integer? 0] [end exact-nonnegative-integer? (string-length str)])
+         (listof (and/c string? immutable?))]{
+
+Same as @code{string-split-sentencess}, but returns immutable strings.
+
+}
+
+@defproc[(string-sentence-indexes [str string?] [start exact-nonnegative-integer? 0] [end exact-nonnegative-integer? (string-length str)])
+         (listof exact-nonnegative-integer?)]{
+
+Returns a list of the indexes of the start of each sentence  in the specified range of @code{str}. It is undefined if @code{start} is not the initial index of a sentence.
+
+}

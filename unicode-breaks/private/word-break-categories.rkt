@@ -6,7 +6,7 @@
 (define (compare-range range ch)
   (cond
    ((unsafe-char<=? (char-range-lower range) ch (char-range-upper range)) 0)
-   ((unsafe-char<? (char-range-lower range) ch) -1)
+   ((unsafe-char<? (char-range-upper range) ch) -1)
    (else 1)))
 (define word-break-properties
   '(ALetter

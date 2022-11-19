@@ -4,8 +4,8 @@
 ;;; Copyright 2022 Shawn Wagner <shawnw.mobile@gmail.com>
 ;;; Released under MIT and Apache licenses; your choice.
 
-(require racket/contract racket/fixnum racket/sequence racket/unsafe/ops
-         srfi/13 "private/word-break-categories.rkt")
+(require racket/contract racket/sequence racket/unsafe/ops srfi/13
+         "private/word-break-categories.rkt" "private/sentence-break-categories.rkt")
 (module+ test (require rackunit))
 
 (provide
@@ -15,13 +15,21 @@
   [string-split-graphemes/immutable (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof (and/c string? immutable?)))]
   [string-grapheme-indexes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof (cons/c exact-nonnegative-integer? exact-nonnegative-integer?)))]
 
-  [char-word-break-property (-> char? (or/c 'ALetter 'CR 'Double_Quote 'Extend 'ExtendNumLet 'Format 'Hebrew_Letter 'Katakana 'LF 'MidLetter 'MidNum 'MidNumLet 'Newline 'Numeric 'Other 'Regional_Indicator 'Single_Quote 'WSegSpace 'ZWJ))]
+  [char-word-break-property (-> char? symbol?)]
   [string-word-break-at? (->* (string? exact-nonnegative-integer?) (exact-nonnegative-integer? exact-nonnegative-integer?) boolean?)]
   [string-word-span (->* (string? exact-nonnegative-integer?) (exact-nonnegative-integer?) exact-nonnegative-integer?)]
   [in-words (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer? #:skip-blanks? any/c) (sequence/c string?))]
   [string-split-words (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer? #:skip-blanks? any/c) (listof string?))]
   [string-split-words/immutable (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer? #:skip-blanks? any/c) (listof (and/c string? immutable?)))]
   [string-word-break-indexes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof exact-nonnegative-integer?))]
+
+  [char-sentence-break-property (-> char? symbol?)]
+  [string-sentence-break-at? (->* (string? exact-nonnegative-integer?) (exact-nonnegative-integer? exact-nonnegative-integer?) boolean?)]
+  [in-sentences (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (sequence/c string?))]
+  [string-split-sentences (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof string?))]
+  [string-split-sentences/immutable (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof (and/c string? immutable?)))]
+  [string-sentence-break-indexes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof exact-nonnegative-integer?))]
+
   ))
 
 ;;; Graphemes
@@ -188,6 +196,114 @@
              #:when (string-word-break-at? str i start end))
     i))
 
+
+;;; Sentence breaks
+
+(define (ParaSep? cat)
+  (or (eq? cat 'Sep) (eq? cat 'CR) (eq? cat 'LF)))
+(define (SATerm? cat) (or (eq? cat 'STerm) (eq? cat 'ATerm)))
+
+(define (sEF? ch)
+  (let ([cat (char-sentence-break-property ch)])
+    (or (eq? cat 'Extend) (eq? cat 'Format))))
+
+(define (next-non-sef-idx str i end) (string-skip str sEF? i end))
+(define (prev-non-sef-idx str i start) (string-skip-right str sEF? start i))
+
+(define (sEFSp? ch)
+  (let ([cat (char-sentence-break-property ch)])
+    (or (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'Sp))))
+
+(define (sEFC? ch)
+  (let ([cat (char-sentence-break-property ch)])
+    (or (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'Close))))
+
+(provide prev-skip-close-sp)
+(define (prev-skip-close-sp str i start)
+  (let ([new-i (string-skip-right str sEFSp? start (+ i 1))])
+    (and new-i (string-skip-right str sEFC? start (+ new-i 1)))))
+
+(define (prev-skip-close str i start)
+  (string-skip-right str sEFC? start i))
+
+(define (notStuff? ch)
+  (let ([cat (char-sentence-break-property ch)])
+    (not (or (eq? cat 'OLetter) (eq? cat 'Upper) (eq? cat 'Lower) (ParaSep? cat) (SATerm? cat)))))
+
+(define (next-skip-notseq str i end)
+  (string-skip str notStuff? i end))
+
+(define (string-sentence-break-at? str i [start 0] [end (string-length str)])
+  (if (or (= i start) (= i end))
+      #t; SB1,2
+      (let* ([before-ch (string-ref str (- i 1))]
+             [before (char-sentence-break-property before-ch)]
+             [after-ch (string-ref str i)]
+             [after (char-sentence-break-property after-ch)])
+        (cond
+          [(and (eq? before 'CR) (eq? after 'LF)) #f] ; SB3
+          [(ParaSep? before) #t] ; SB4
+          [(or (eq? after 'Format) (eq? after 'Extend)) #f] ; SB5
+          [else
+           (let* ([before-idx (prev-non-sef-idx str i start)] ; SB5 ignore rules
+                  [before-ch (if before-idx (string-ref str before-idx) before-ch)]
+                  [before (if (and before-idx (not (= before-idx (- i 1)))) (char-sentence-break-property before-ch) before)]
+                  [after-idx (next-non-sef-idx str i end)]
+                  [after-ch (and after-idx (string-ref str after-idx))]
+                  [after (if (and after-ch (not (= after-idx i))) (char-sentence-break-property after-ch) after)]
+                  [next-before-idx (and before-idx (>= (- before-idx 1) start) (prev-non-sef-idx str before-idx start))]
+                  [next-before-ch (and next-before-idx (string-ref str next-before-idx))]
+                  [next-before (and next-before-ch (char-sentence-break-property next-before-ch))]
+                  [before-skip-close-sp-idx (and before-idx (prev-skip-close-sp str before-idx start))]
+                  [before-skip-close-sp-ch (and before-skip-close-sp-idx (string-ref str before-skip-close-sp-idx))]
+                  [before-skip-close-sp (and before-skip-close-sp-ch (char-sentence-break-property before-skip-close-sp-ch))])
+             #;(printf "before-skip-close-sp-idx: ~S before-skip-close-sp-ch: ~S before-skip-close-sp: ~S~%next-before-idx: ~S next-before-ch: ~S next-before: ~S~%before-idx: ~S before-ch: ~S before: ~S~%after-idx: ~S after-ch: ~S after: ~S~%"
+                       before-skip-close-sp-idx before-skip-close-sp-ch before-skip-close-sp next-before-idx next-before-ch next-before before-idx before-ch before after-idx after-ch after)
+             (cond
+               [(and (eq? before 'ATerm) (eq? after 'Numeric)) #f] ; SB6
+               [(and (or (eq? next-before 'Upper) (eq? next-before 'Lower))
+                     (eq? before 'ATerm)
+                     (eq? after 'Upper)) #f] ; SB7
+               [(and (eq? before-skip-close-sp 'ATerm)
+                     (let ([after-idx (next-skip-notseq str after-idx end)])
+                       (and after-idx (eq? (char-sentence-break-property (string-ref str after-idx)) 'Lower)))) #f] ; SB8
+               [(and (SATerm? before-skip-close-sp)
+                     (or (eq? after 'SContinue) (SATerm? after))) #f] ; SB8a
+               [(and (let ([before-close-idx (and before-idx (prev-skip-close str (+ before-idx 1) start))])
+                       (and before-close-idx (SATerm? (char-sentence-break-property (string-ref str before-close-idx)))))
+                     (or (eq? after 'Close) (eq? after 'Sp) (ParaSep? after))) #f] ; SB9
+               [(and (SATerm? before-skip-close-sp)
+                     (or (eq? after 'Sp) (ParaSep? after))) #f] ; SB10
+               [(if (ParaSep? before)
+                    (let* ([before-skip-close-sp-idx (prev-skip-close-sp str before-idx start)]
+                           [before-skip-close-sp (and before-skip-close-sp-idx (char-sentence-break-property (string-ref str before-skip-close-sp-idx)))])
+                      (SATerm? before-skip-close-sp))
+                    (SATerm? before-skip-close-sp)) #t] ; SB11
+               [else #f]))])))) ; SB998
+
+(define (in-sentences str [start 0] [end (string-length str)])
+  (let ([str (string->immutable-string str)])
+    (make-do-sequence
+     (lambda ()
+       (values
+        (lambda (sentence-breaks) (substring str (car sentence-breaks) (cadr sentence-breaks)))
+        (lambda (sentence-breaks) (cdr sentence-breaks))
+        (string-sentence-break-indexes str start end)
+        (lambda (sentence-breaks) (>= (length sentence-breaks) 2))
+        #f
+        #f)))))
+
+(define (string-split-sentences str [start 0] [end (string-length str)])
+  (sequence->list (in-sentences str start end)))
+
+(define (string-split-sentences/immutable str [start 0] [end (string-length str)])
+  (map unsafe-string->immutable-string! (sequence->list (in-sentences str start end))))
+
+(define (string-sentence-break-indexes str [start 0] [end (string-length str)])
+  (for/list ([i (in-inclusive-range start end)]
+             #:when (string-sentence-break-at? str i start end))
+    i))
+
 (module+ test
   (define pure-ascii "abcd\r\n")
   (define mixed "abc\u0308d \u1100\u1161\u11A8")
@@ -213,4 +329,10 @@
   (test-equal? "words without spaces"
                (string-split-words some-words #:skip-blanks? #t)
                '("The" "quick" "(" "“" "brown" "”" ")" "fox" "can’t" "jump" "32.3" "feet" "," "right" "?"))
+
+  (define some-sentences "This is a sentence. And this is another. Finally a third.")
+  (test-equal? "sentences"
+               (string-split-sentences some-sentences)
+               '("This is a sentence. " "And this is another. " "Finally a third."))
+
   )
