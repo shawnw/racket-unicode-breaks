@@ -1,6 +1,6 @@
 #lang info
 (define collection 'multi)
-(define deps '("base" ("racket" #:version "8.7")))
+(define deps '("base" "srfi-lib" ("racket" #:version "8.7")))
 (define build-deps '("scribble-lib" "racket-doc" "rackunit-lib"))
 (define scribblings '(("unicode-breaks/scribblings/unicode-breaks.scrbl" ())))
 (define pkg-desc "Implementations of Unicode Annex #29 break algorithms")
