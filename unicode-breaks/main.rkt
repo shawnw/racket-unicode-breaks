@@ -5,6 +5,7 @@
 ;;; Released under MIT and Apache licenses; your choice.
 
 (require racket/contract racket/sequence racket/unsafe/ops srfi/13
+         (for-syntax racket/base)
          "private/word-break-categories.rkt" "private/sentence-break-categories.rkt")
 (module+ test (require rackunit))
 
@@ -32,10 +33,49 @@
 
   ))
 
+(define-syntax define/range-checked
+  (syntax-rules ()
+    [(_ (name str i start end) body ...)
+     (define (name str i [start 0] [end (string-length str)])
+       (cond
+         [(< start 0)
+          (raise-range-error 'name "string" "starting " start str 0 (string-length str))]
+         [(or (< end start) (> end (string-length str)))
+          (raise-range-error 'name "string" "ending " end str start (string-length str) 0)]
+         [(or (< i start) (> i end))
+          (raise-range-error 'name "string" "" i str start end)]
+         [else (void)])
+       body ...)]
+    [(_ (name str start end) body ...)
+     (define (name str [start 0] [end (string-length str)])
+       (cond
+         [(< start 0)
+          (raise-range-error 'name "string" "starting " start str 0 (string-length str))]
+         [(or (< end start) (> end (string-length str)))
+          (raise-range-error 'name "string" "ending " end str start (string-length str) 0)]
+         [else (void)])
+       body ...)]))
+
+(define-syntax define/range-checked*
+  (syntax-rules ()
+    [(_ (name str start end more-optional-args ...) body ...)
+     (define (name str [start 0] [end (string-length str)] more-optional-args ...)
+       (cond
+         [(< start 0)
+          (raise-range-error 'name "string" "starting " start str 0 (string-length str))]
+         [(or (< end start) (> end (string-length str)))
+          (raise-range-error 'name "string" "ending " end str start (string-length str) 0)]
+         [else (void)])
+       body ...)]))
+
+
 ;;; Graphemes
 
 ;; Create a sequence of substrings, one grapheme per element
-(define (in-graphemes str [start 0] [end (string-length str)])
+(define/range-checked (in-graphemes str start end)
+  (%in-graphemes str start end))
+
+(define (%in-graphemes str start end)
   (let* ([str (string->immutable-string str)]
          [end-pos (+ start (string-grapheme-span str start end))])
     (make-do-sequence
@@ -52,15 +92,15 @@
         #f)))))
 
 ;; Split a string into a list of substrings, one grapheme per element
-(define (string-split-graphemes str [start 0] [end (string-length str)])
-  (sequence->list (in-graphemes str start end)))
+(define/range-checked (string-split-graphemes str start end)
+  (sequence->list (%in-graphemes str start end)))
 
 ;; Same, returning immutable strings
-(define (string-split-graphemes/immutable str [start 0] [end (string-length str)])
-  (map unsafe-string->immutable-string! (sequence->list (in-graphemes str start end))))
+(define/range-checked (string-split-graphemes/immutable str start end)
+  (map unsafe-string->immutable-string! (sequence->list (%in-graphemes str start end))))
 
 ;; Return a list of the pairs of start and one past end indexes of each grapheme
-(define (string-grapheme-indexes str [start 0] [end (string-length str)])
+(define/range-checked (string-grapheme-indexes str start end)
   (let loop [(i start)
              (indexes '())]
     (if (>= i end)
@@ -87,7 +127,10 @@
 (define (prev-non-ef-idx str i start) (string-skip-right str EFZ? start i))
 
 ;; #t if there's a word break before the character at index i
-(define (string-word-break-at? str i [start 0] [end (string-length str)])
+(define/range-checked (string-word-break-at? str i start end)
+  (%string-word-break-at? str i start end))
+
+(define (%string-word-break-at? str i start end)
   (if (or (= i start) (= i end))
       #t; WB1,2
       (let* ([before-ch (string-ref str (- i 1))]
@@ -155,9 +198,9 @@
                [else #t]))])))) ; WB999
 
 ;; Like string-grapheme-span but for word breaks
-(define (string-word-span str start [end (string-length str)])
+(define/range-checked (string-word-span str start end)
   (let ([first-break (for/first ([i (in-range (+ start 1) end)]
-                                 #:when (string-word-break-at? str i start end))
+                                 #:when (%string-word-break-at? str i start end))
                        i)])
     (if first-break
         (- first-break start)
@@ -170,11 +213,14 @@
      (skip-whitespace-only-segments str (cdr word-breaks))]
     [else word-breaks]))
 
-(define (in-words str [start 0] [end (string-length str)] #:skip-blanks? [skip-blanks? #f])
+(define/range-checked* (in-words str start end #:skip-blanks? [skip-blanks? #f])
+  (%in-words str start end skip-blanks?))
+
+(define (%in-words str start end skip-blanks?)
   (let* ([str (string->immutable-string str)]
          [initial-word-breaks (if skip-blanks?
-                                  (skip-whitespace-only-segments str (string-word-break-indexes str start end))
-                                  (string-word-break-indexes str start end))])
+                                  (skip-whitespace-only-segments str (%string-word-break-indexes str start end))
+                                  (%string-word-break-indexes str start end))])
     (make-do-sequence
      (lambda ()
        (values
@@ -185,17 +231,19 @@
         #f
         #f)))))
 
-(define (string-split-words str [start 0] [end (string-length str)] #:skip-blanks? [skip-blanks? #f])
-  (sequence->list (in-words str start end #:skip-blanks? skip-blanks?)))
+(define/range-checked* (string-split-words str start end #:skip-blanks? [skip-blanks? #f])
+  (sequence->list (%in-words str start end skip-blanks?)))
 
-(define (string-split-words/immutable str [start 0] [end (string-length str)] #:skip-blanks? [skip-blanks? #f])
-  (map unsafe-string->immutable-string! (sequence->list (in-words str start end #:skip-blanks? skip-blanks?))))
+(define/range-checked* (string-split-words/immutable str start end #:skip-blanks? [skip-blanks? #f])
+  (map unsafe-string->immutable-string! (sequence->list (%in-words str start end skip-blanks?))))
 
-(define (string-word-break-indexes str [start 0] [end (string-length str)])
+(define/range-checked (string-word-break-indexes str start end)
+  (%string-word-break-indexes str start end))
+
+(define (%string-word-break-indexes str start end)
   (for/list ([i (in-inclusive-range start end)]
-             #:when (string-word-break-at? str i start end))
+             #:when (%string-word-break-at? str i start end))
     i))
-
 
 ;;; Sentence breaks
 
@@ -218,7 +266,6 @@
   (let ([cat (char-sentence-break-property ch)])
     (or (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'Close))))
 
-(provide prev-skip-close-sp)
 (define (prev-skip-close-sp str i start)
   (let ([new-i (string-skip-right str sEFSp? start (+ i 1))])
     (and new-i (string-skip-right str sEFC? start (+ new-i 1)))))
@@ -233,7 +280,10 @@
 (define (next-skip-notseq str i end)
   (string-skip str notStuff? i end))
 
-(define (string-sentence-break-at? str i [start 0] [end (string-length str)])
+(define/range-checked (string-sentence-break-at? str i start end)
+  (%string-sentence-break-at? str i start end))
+
+(define (%string-sentence-break-at? str i start end)
   (if (or (= i start) (= i end))
       #t; SB1,2
       (let* ([before-ch (string-ref str (- i 1))]
@@ -281,27 +331,33 @@
                     (SATerm? before-skip-close-sp)) #t] ; SB11
                [else #f]))])))) ; SB998
 
-(define (in-sentences str [start 0] [end (string-length str)])
+(define/range-checked (in-sentences str start end)
+  (%in-sentences str start end))
+
+(define (%in-sentences str start end)
   (let ([str (string->immutable-string str)])
     (make-do-sequence
      (lambda ()
        (values
         (lambda (sentence-breaks) (substring str (car sentence-breaks) (cadr sentence-breaks)))
         (lambda (sentence-breaks) (cdr sentence-breaks))
-        (string-sentence-break-indexes str start end)
+        (%string-sentence-break-indexes str start end)
         (lambda (sentence-breaks) (>= (length sentence-breaks) 2))
         #f
         #f)))))
 
-(define (string-split-sentences str [start 0] [end (string-length str)])
-  (sequence->list (in-sentences str start end)))
+(define/range-checked (string-split-sentences str start end)
+  (sequence->list (%in-sentences str start end)))
 
-(define (string-split-sentences/immutable str [start 0] [end (string-length str)])
-  (map unsafe-string->immutable-string! (sequence->list (in-sentences str start end))))
+(define/range-checked (string-split-sentences/immutable str start end)
+  (map unsafe-string->immutable-string! (sequence->list (%in-sentences str start end))))
 
-(define (string-sentence-break-indexes str [start 0] [end (string-length str)])
+(define/range-checked (string-sentence-break-indexes str start end)
+  (%string-sentence-break-indexes str start end))
+
+(define (%string-sentence-break-indexes str start end)
   (for/list ([i (in-inclusive-range start end)]
-             #:when (string-sentence-break-at? str i start end))
+             #:when (%string-sentence-break-at? str i start end))
     i))
 
 (module+ test
