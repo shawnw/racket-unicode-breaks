@@ -4,7 +4,7 @@
 ;;; Copyright 2022 Shawn Wagner <shawnw.mobile@gmail.com>
 ;;; Released under MIT and Apache licenses; your choice.
 
-(require racket/contract racket/sequence racket/unsafe/ops srfi/13
+(require racket/contract racket/sequence racket/unsafe/ops
          (for-syntax racket/base)
          "private/word-break-categories.rkt" "private/sentence-break-categories.rkt")
 (module+ test (require rackunit))
@@ -68,16 +68,53 @@
          [else (void)])
        body ...)]))
 
+;; Cache of break properties for a string
+(struct cache (start vec str func))
+
+(define (make-word-break-cache str start end)
+  (cache start (for/vector #:length (- end start) ([ch (in-string str start end)]) (char-word-break-property ch)) str char-word-break-property))
+
+(define (make-sentence-break-cache str start end)
+  (cache start (for/vector #:length (- end start) ([ch (in-string str start end)]) (char-sentence-break-property ch)) str char-sentence-break-property))
+
+(define (make-empty-cache str start end f)
+  (cache start #f str f))
+
+(define (cache-property-ref c i)
+  (let ([vec (cache-vec c)])
+    (if vec
+        (unsafe-vector-ref vec (unsafe-fx- i (cache-start c)))
+        ((cache-func c) (unsafe-string-ref (cache-str c) i)))))
+
+(define (string-skip/with-cache str pred? start end break-cache)
+  (cond
+    [(unsafe-fx= start end) #f]
+    [(pred? (unsafe-string-ref str start) (cache-property-ref break-cache start))
+     (string-skip/with-cache str pred? (unsafe-fx+ start 1) end break-cache)]
+    [else start]))
+
+(define (string-skip-right/with-cache str pred? start end break-cache)
+  (let ([endm1 (unsafe-fx- end 1)])
+    (cond
+      [(unsafe-fx= start end) #f]
+      [(pred? (unsafe-string-ref str endm1) (cache-property-ref break-cache endm1))
+       (string-skip-right/with-cache str pred? start endm1 break-cache)]
+      [else (unsafe-fx- end 1)])))
+
+(define (string-count/with-cache str pred? start end break-cache)
+  (for/sum ([ch (in-string str start end)]
+            [i (in-naturals start)]
+            #:when (pred? ch (cache-property-ref break-cache i)))
+    1))
 
 ;;; Graphemes
 
 ;; Create a sequence of substrings, one grapheme per element
 (define/range-checked (in-graphemes str start end)
-  (%in-graphemes str start end))
+  (%in-graphemes (string->immutable-string str) start end))
 
 (define (%in-graphemes str start end)
-  (let* ([str (string->immutable-string str)]
-         [end-pos (+ start (string-grapheme-span str start end))])
+  (let ([end-pos (+ start (string-grapheme-span str start end))])
     (make-do-sequence
      (lambda ()
        (values
@@ -114,29 +151,36 @@
 (define (AHLetter? cat) (or (eq? cat 'ALetter) (eq? cat 'Hebrew_Letter)))
 (define (MidNumLetQ? cat) (or (eq? cat 'MidNumLet) (eq? cat 'Single_Quote)))
 
-(define (Regional_Indicator? ch) (eq? (char-word-break-property ch) 'Regional_Indicator))
-(define (Regional_Indicator/EFZ? ch)
-  (let ([cat (char-word-break-property ch)])
-    (or (eq? cat 'Regional_Indicator) (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'ZWJ))))
+(define (Regional_Indicator? ch break)
+  (if break
+      (eq? break 'Regional_Indicator)
+      (eq? (char-word-break-property ch) 'Regional_Indicator)))
+(define (Regional_Indicator/EFZ? ch break)
+  (if break
+      (or (eq? break 'Regional_Indicator) (eq? break 'Extend) (eq? break 'Format) (eq? break 'ZWJ))
+      (let ([cat (char-word-break-property ch)])
+        (or (eq? cat 'Regional_Indicator) (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'ZWJ)))))
 
-(define (EFZ? ch)
-  (let ([cat (char-word-break-property ch)])
-    (or (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'ZWJ))))
+(define (EFZ? ch break)
+  (if break
+      (or (eq? break 'Extend) (eq? break 'Format) (eq? break 'ZWJ))
+      (let ([cat (char-word-break-property ch)])
+        (or (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'ZWJ)))))
 
-(define (next-non-ef-idx str i end) (string-skip str EFZ? i end))
-(define (prev-non-ef-idx str i start) (string-skip-right str EFZ? start i))
+(define (next-non-ef-idx str i end break-cache) (string-skip/with-cache str EFZ? i end break-cache))
+(define (prev-non-ef-idx str i start break-cache) (string-skip-right/with-cache str EFZ? start i break-cache))
 
 ;; #t if there's a word break before the character at index i
 (define/range-checked (string-word-break-at? str i start end)
-  (%string-word-break-at? str i start end))
+  (%string-word-break-at? str i start end (make-empty-cache str start end char-word-break-property)))
 
-(define (%string-word-break-at? str i start end)
+(define (%string-word-break-at? str i start end bc)
   (if (or (= i start) (= i end))
       #t; WB1,2
       (let* ([before-ch (string-ref str (- i 1))]
-             [before (char-word-break-property before-ch)]
+             [before (cache-property-ref bc (- i 1))]
              [after-ch (string-ref str i)]
-             [after (char-word-break-property after-ch)])
+             [after (cache-property-ref bc i)])
         (cond
           [(and (eq? before 'CR) (eq? after 'LF)) #f] ; WB3
           [(or (or (eq? before 'Newline) (eq? before 'CR) (eq? before 'LF))
@@ -145,18 +189,18 @@
           [(and (eq? before 'WSegSpace) (eq? after 'WSegSpace)) #f] ; WB3d
           [(or (eq? after 'Format) (eq? after 'Extend) (eq? after 'ZWJ)) #f] ; WB4
           [else
-           (let* ([before-idx (prev-non-ef-idx str i start)] ; WB4 ignore rules
+           (let* ([before-idx (prev-non-ef-idx str i start bc)] ; WB4 ignore rules
                   [before-ch (if before-idx (string-ref str before-idx) before-ch)]
-                  [before (if (and before-idx (not (= before-idx (- i 1)))) (char-word-break-property before-ch) before)]
-                  [after-idx (next-non-ef-idx str i end)]
+                  [before (if (and before-idx (not (= before-idx (- i 1)))) (cache-property-ref bc before-idx) before)]
+                  [after-idx (next-non-ef-idx str i end bc)]
                   [after-ch (and after-idx (string-ref str after-idx))]
-                  [after (if (and after-ch (not (= after-idx i))) (char-word-break-property after-ch) after)]
-                  [next-before-idx (and before-idx (>= (- before-idx 1) start) (prev-non-ef-idx str before-idx start))]
+                  [after (if (and after-ch (not (= after-idx i))) (cache-property-ref bc after-idx) after)]
+                  [next-before-idx (and before-idx (>= (- before-idx 1) start) (prev-non-ef-idx str before-idx start bc))]
                   [next-before-ch (and next-before-idx (string-ref str next-before-idx))]
-                  [next-before (and next-before-ch (char-word-break-property next-before-ch))]
-                  [next-after-idx (and (< (+ after-idx 1) end) (next-non-ef-idx str (+ after-idx 1) end))]
+                  [next-before (and next-before-idx (cache-property-ref bc next-before-idx))]
+                  [next-after-idx (and (< (+ after-idx 1) end) (next-non-ef-idx str (+ after-idx 1) end bc))]
                   [next-after-ch (and next-after-idx (string-ref str next-after-idx))]
-                  [next-after (and next-after-ch (char-word-break-property next-after-ch))])
+                  [next-after (and next-after-idx (cache-property-ref bc next-after-idx))])
              #;(printf "next-before-idx: ~S next-before-ch: ~S next-before: ~S~%before-idx: ~S before-ch: ~S before: ~S~%after-idx: ~S after-ch: ~S after: ~S~%next-after-idx: ~S next-after-ch: ~S next-after: ~S~%"
                      next-before-idx next-before-ch next-before before-idx before-ch before after-idx after-ch after next-after-idx next-after-ch next-after)
              (cond
@@ -191,16 +235,17 @@
                      (or (AHLetter? after) (eq? after 'Numeric) (eq? after 'Katakana))) #f] ; WB13b
                [(and (eq? before 'Regional_Indicator) (eq? after 'Regional_Indicator)
                      ; Find out how many Regional_Indicator characters exist before the point
-                     (let ([first-non-ri (string-skip-right str Regional_Indicator/EFZ? start after-idx)])
+                     (let ([first-non-ri (string-skip-right/with-cache str Regional_Indicator/EFZ? start after-idx bc)])
                        (if first-non-ri
-                           (odd? (string-count str Regional_Indicator? (+ first-non-ri 1) after-idx))
-                           (odd? (string-count str Regional_Indicator? start after-idx))))) #f] ; WB15, 16
+                           (odd? (string-count/with-cache str Regional_Indicator? (+ first-non-ri 1) after-idx bc))
+                           (odd? (string-count/with-cache str Regional_Indicator? start after-idx bc))))) #f] ; WB15, 16
                [else #t]))])))) ; WB999
 
 ;; Like string-grapheme-span but for word breaks
 (define/range-checked (string-word-span str start end)
-  (let ([first-break (for/first ([i (in-range (+ start 1) end)]
-                                 #:when (%string-word-break-at? str i start end))
+  (let* ([break-cache (make-word-break-cache str start end)]
+         [first-break (for/first ([i (in-range (+ start 1) end)]
+                                  #:when (%string-word-break-at? str i start end break-cache))
                        i)])
     (if first-break
         (- first-break start)
@@ -214,13 +259,13 @@
     [else word-breaks]))
 
 (define/range-checked* (in-words str start end #:skip-blanks? [skip-blanks? #f])
-  (%in-words str start end skip-blanks?))
+  (%in-words (string->immutable-string str) start end skip-blanks?))
 
 (define (%in-words str start end skip-blanks?)
-  (let* ([str (string->immutable-string str)]
+  (let* ([break-cache (make-word-break-cache str start end)]
          [initial-word-breaks (if skip-blanks?
-                                  (skip-whitespace-only-segments str (%string-word-break-indexes str start end))
-                                  (%string-word-break-indexes str start end))])
+                                  (skip-whitespace-only-segments str (%string-word-break-indexes str start end break-cache))
+                                  (%string-word-break-indexes str start end break-cache))])
     (make-do-sequence
      (lambda ()
        (values
@@ -238,11 +283,11 @@
   (map unsafe-string->immutable-string! (sequence->list (%in-words str start end skip-blanks?))))
 
 (define/range-checked (string-word-break-indexes str start end)
-  (%string-word-break-indexes str start end))
+  (%string-word-break-indexes str start end (make-word-break-cache str start end)))
 
-(define (%string-word-break-indexes str start end)
+(define (%string-word-break-indexes str start end bc)
   (for/list ([i (in-inclusive-range start end)]
-             #:when (%string-word-break-at? str i start end))
+             #:when (%string-word-break-at? str i start end bc))
     i))
 
 ;;; Sentence breaks
@@ -251,62 +296,70 @@
   (or (eq? cat 'Sep) (eq? cat 'CR) (eq? cat 'LF)))
 (define (SATerm? cat) (or (eq? cat 'STerm) (eq? cat 'ATerm)))
 
-(define (sEF? ch)
-  (let ([cat (char-sentence-break-property ch)])
-    (or (eq? cat 'Extend) (eq? cat 'Format))))
+(define (sEF? ch break)
+  (if break
+      (or (eq? break 'Extend) (eq? break 'Format))
+      (let ([cat (char-sentence-break-property ch)])
+        (or (eq? cat 'Extend) (eq? cat 'Format)))))
 
-(define (next-non-sef-idx str i end) (string-skip str sEF? i end))
-(define (prev-non-sef-idx str i start) (string-skip-right str sEF? start i))
+(define (next-non-sef-idx str i end break-cache) (string-skip/with-cache str sEF? i end break-cache))
+(define (prev-non-sef-idx str i start break-cache) (string-skip-right/with-cache str sEF? start i break-cache))
 
-(define (sEFSp? ch)
-  (let ([cat (char-sentence-break-property ch)])
-    (or (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'Sp))))
+(define (sEFSp? ch break)
+  (if break
+      (or (eq? break 'Extend) (eq? break 'Format) (eq? break 'Sp))
+      (let ([cat (char-sentence-break-property ch)])
+        (or (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'Sp)))))
 
-(define (sEFC? ch)
-  (let ([cat (char-sentence-break-property ch)])
-    (or (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'Close))))
+(define (sEFC? ch break)
+  (if break
+      (or (eq? break 'Extend) (eq? break 'Format) (eq? break 'Close))
+      (let ([cat (char-sentence-break-property ch)])
+        (or (eq? cat 'Extend) (eq? cat 'Format) (eq? cat 'Close)))))
 
-(define (prev-skip-close-sp str i start)
-  (let ([new-i (string-skip-right str sEFSp? start (+ i 1))])
-    (and new-i (string-skip-right str sEFC? start (+ new-i 1)))))
+(define (prev-skip-close-sp str i start break-cache)
+  (let ([new-i (string-skip-right/with-cache str sEFSp? start (+ i 1) break-cache)])
+    (and new-i (string-skip-right/with-cache str sEFC? start (+ new-i 1) break-cache))))
 
-(define (prev-skip-close str i start)
-  (string-skip-right str sEFC? start i))
+(define (prev-skip-close str i start break-cache)
+  (string-skip-right/with-cache str sEFC? start i break-cache))
 
-(define (notStuff? ch)
-  (let ([cat (char-sentence-break-property ch)])
-    (not (or (eq? cat 'OLetter) (eq? cat 'Upper) (eq? cat 'Lower) (ParaSep? cat) (SATerm? cat)))))
+(define (notStuff? ch break)
+  (if break
+      (not (or (eq? break 'OLetter) (eq? break 'Upper) (eq? break 'Lower) (ParaSep? break) (SATerm? break)))
+      (let ([cat (char-sentence-break-property ch)])
+        (not (or (eq? cat 'OLetter) (eq? cat 'Upper) (eq? cat 'Lower) (ParaSep? cat) (SATerm? cat))))))
 
-(define (next-skip-notseq str i end)
-  (string-skip str notStuff? i end))
+(define (next-skip-notseq str i end break-cache)
+  (string-skip/with-cache str notStuff? i end break-cache))
 
 (define/range-checked (string-sentence-break-at? str i start end)
-  (%string-sentence-break-at? str i start end))
+  (%string-sentence-break-at? str i start end (make-empty-cache str start end char-sentence-break-property)))
 
-(define (%string-sentence-break-at? str i start end)
+(define (%string-sentence-break-at? str i start end bc)
   (if (or (= i start) (= i end))
       #t; SB1,2
       (let* ([before-ch (string-ref str (- i 1))]
-             [before (char-sentence-break-property before-ch)]
+             [before (cache-property-ref bc (- i 1))]
              [after-ch (string-ref str i)]
-             [after (char-sentence-break-property after-ch)])
+             [after (cache-property-ref bc i)])
         (cond
           [(and (eq? before 'CR) (eq? after 'LF)) #f] ; SB3
           [(ParaSep? before) #t] ; SB4
           [(or (eq? after 'Format) (eq? after 'Extend)) #f] ; SB5
           [else
-           (let* ([before-idx (prev-non-sef-idx str i start)] ; SB5 ignore rules
+           (let* ([before-idx (prev-non-sef-idx str i start bc)] ; SB5 ignore rules
                   [before-ch (if before-idx (string-ref str before-idx) before-ch)]
-                  [before (if (and before-idx (not (= before-idx (- i 1)))) (char-sentence-break-property before-ch) before)]
-                  [after-idx (next-non-sef-idx str i end)]
+                  [before (if (and before-idx (not (= before-idx (- i 1)))) (cache-property-ref bc before-idx) before)]
+                  [after-idx (next-non-sef-idx str i end bc)]
                   [after-ch (and after-idx (string-ref str after-idx))]
-                  [after (if (and after-ch (not (= after-idx i))) (char-sentence-break-property after-ch) after)]
-                  [next-before-idx (and before-idx (>= (- before-idx 1) start) (prev-non-sef-idx str before-idx start))]
+                  [after (if (and after-idx (not (= after-idx i))) (cache-property-ref bc after-idx) after)]
+                  [next-before-idx (and before-idx (>= (- before-idx 1) start) (prev-non-sef-idx str before-idx start bc))]
                   [next-before-ch (and next-before-idx (string-ref str next-before-idx))]
-                  [next-before (and next-before-ch (char-sentence-break-property next-before-ch))]
-                  [before-skip-close-sp-idx (and before-idx (prev-skip-close-sp str before-idx start))]
+                  [next-before (and next-before-idx (cache-property-ref bc next-before-idx))]
+                  [before-skip-close-sp-idx (and before-idx (prev-skip-close-sp str before-idx start bc))]
                   [before-skip-close-sp-ch (and before-skip-close-sp-idx (string-ref str before-skip-close-sp-idx))]
-                  [before-skip-close-sp (and before-skip-close-sp-ch (char-sentence-break-property before-skip-close-sp-ch))])
+                  [before-skip-close-sp (and before-skip-close-sp-idx (cache-property-ref bc before-skip-close-sp-idx))])
              #;(printf "before-skip-close-sp-idx: ~S before-skip-close-sp-ch: ~S before-skip-close-sp: ~S~%next-before-idx: ~S next-before-ch: ~S next-before: ~S~%before-idx: ~S before-ch: ~S before: ~S~%after-idx: ~S after-ch: ~S after: ~S~%"
                        before-skip-close-sp-idx before-skip-close-sp-ch before-skip-close-sp next-before-idx next-before-ch next-before before-idx before-ch before after-idx after-ch after)
              (cond
@@ -315,33 +368,33 @@
                      (eq? before 'ATerm)
                      (eq? after 'Upper)) #f] ; SB7
                [(and (eq? before-skip-close-sp 'ATerm)
-                     (let ([after-idx (next-skip-notseq str after-idx end)])
-                       (and after-idx (eq? (char-sentence-break-property (string-ref str after-idx)) 'Lower)))) #f] ; SB8
+                     (let ([after-idx (next-skip-notseq str after-idx end bc)])
+                       (and after-idx (eq? (cache-property-ref bc after-idx) 'Lower)))) #f] ; SB8
                [(and (SATerm? before-skip-close-sp)
                      (or (eq? after 'SContinue) (SATerm? after))) #f] ; SB8a
-               [(and (let ([before-close-idx (and before-idx (prev-skip-close str (+ before-idx 1) start))])
-                       (and before-close-idx (SATerm? (char-sentence-break-property (string-ref str before-close-idx)))))
+               [(and (let ([before-close-idx (and before-idx (prev-skip-close str (+ before-idx 1) start bc))])
+                       (and before-close-idx (SATerm? (cache-property-ref bc before-close-idx))))
                      (or (eq? after 'Close) (eq? after 'Sp) (ParaSep? after))) #f] ; SB9
                [(and (SATerm? before-skip-close-sp)
                      (or (eq? after 'Sp) (ParaSep? after))) #f] ; SB10
                [(if (ParaSep? before)
-                    (let* ([before-skip-close-sp-idx (prev-skip-close-sp str before-idx start)]
-                           [before-skip-close-sp (and before-skip-close-sp-idx (char-sentence-break-property (string-ref str before-skip-close-sp-idx)))])
+                    (let* ([before-skip-close-sp-idx (prev-skip-close-sp str before-idx start bc)]
+                           [before-skip-close-sp (and before-skip-close-sp-idx (cache-property-ref bc before-skip-close-sp-idx))])
                       (SATerm? before-skip-close-sp))
                     (SATerm? before-skip-close-sp)) #t] ; SB11
                [else #f]))])))) ; SB998
 
 (define/range-checked (in-sentences str start end)
-  (%in-sentences str start end))
+  (%in-sentences (string->immutable-string str) start end))
 
 (define (%in-sentences str start end)
-  (let ([str (string->immutable-string str)])
+  (let ([break-cache (make-sentence-break-cache str start end)])
     (make-do-sequence
      (lambda ()
        (values
         (lambda (sentence-breaks) (substring str (car sentence-breaks) (cadr sentence-breaks)))
         (lambda (sentence-breaks) (cdr sentence-breaks))
-        (%string-sentence-break-indexes str start end)
+        (%string-sentence-break-indexes str start end break-cache)
         (lambda (sentence-breaks) (>= (length sentence-breaks) 2))
         #f
         #f)))))
@@ -353,11 +406,11 @@
   (map unsafe-string->immutable-string! (sequence->list (%in-sentences str start end))))
 
 (define/range-checked (string-sentence-break-indexes str start end)
-  (%string-sentence-break-indexes str start end))
+  (%string-sentence-break-indexes str start end (make-sentence-break-cache str start end)))
 
-(define (%string-sentence-break-indexes str start end)
+(define (%string-sentence-break-indexes str start end break-cache)
   (for/list ([i (in-inclusive-range start end)]
-             #:when (%string-sentence-break-at? str i start end))
+             #:when (%string-sentence-break-at? str i start end break-cache))
     i))
 
 (module+ test
