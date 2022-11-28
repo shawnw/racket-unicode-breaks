@@ -47,7 +47,7 @@ the initial index of a grapheme sequence.
 
 @section{Word Breaks}
 
-@defproc[(char-word-break-property [ch char?] symbol?)]{
+@defproc[(char-word-break-property [ch char?]) symbol?]{
 
  Returns the Unicode word break property of the given character, which
  is one of the following symbols: @code{'ALetter}, @code{'CR},
