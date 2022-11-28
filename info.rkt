@@ -2,7 +2,6 @@
 (define collection 'multi)
 (define deps '("base" "srfi-lib" ("racket" #:version "8.7")))
 (define build-deps '("scribble-lib" "racket-doc" "rackunit-lib"))
-(define scribblings '(("unicode-breaks/scribblings/unicode-breaks.scrbl" ())))
 (define pkg-desc "Implementations of Unicode Annex #29 break algorithms")
 (define version "0.14.5") ; Major.Unicode-Version.Minor
 (define pkg-authors '(shawnw))
