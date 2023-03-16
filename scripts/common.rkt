@@ -1,7 +1,7 @@
 #lang racket
 
 ;;; Routines used by multiple scripts.
-(require (prefix-in is- data/integer-set) net/url)
+(require racket/match (prefix-in is- data/integer-set) net/url)
 (provide cache-file read-unicode-tables unicode-tables->vector create-source-file generate-tests
          test-func
          (struct-out char-range))
@@ -23,18 +23,16 @@
 (define (read-unicode-tables)
   (for/fold ([tables (hasheq)])
             ([line (in-lines)])
-    (cond
-      [(regexp-match #px"^([[:xdigit:]]{4,6})\\s+;\\s+([[:word:]]+)" line)
-       => (lambda (match-data)
-            (hash-update tables (string->symbol (third match-data))
-                         (lambda (cps) (is-union cps (is-make-range (string->number (second match-data) 16))))
-                         is-make-range))]
-      [(regexp-match #px"^([[:xdigit:]]{4,6})\\.\\.([[:xdigit:]]{4,6})\\s+;\\s+([[:word:]]+)" line)
-       => (lambda (match-data)
-            (hash-update tables (string->symbol (fourth match-data))
-                         (lambda (cps) (is-union cps (is-make-range (string->number (second match-data) 16) (string->number (third match-data) 16))))
-                         is-make-range))]
-      [else tables])))
+    (match line
+      [(pregexp #px"^([[:xdigit:]]{4,6})\\s*;\\s*([[:word:]]+)" (list _ num name))
+       (hash-update tables (string->symbol name)
+                    (lambda (cps) (is-union cps (is-make-range (string->number num 16))))
+                    is-make-range)]
+      [(pregexp #px"^([[:xdigit:]]{4,6})\\.\\.([[:xdigit:]]{4,6})\\s*;\\s([[:word:]]+)" (list _ begin end name))
+       (hash-update tables (string->symbol name)
+                    (lambda (cps) (is-union cps (is-make-range (string->number begin 16) (string->number end 16))))
+                    is-make-range)]
+      [_ tables])))
 
 (define (unicode-tables->vector tables)
   (let ([vec (for*/vector

@@ -7,7 +7,7 @@
 (require racket/contract racket/require racket/sequence racket/unsafe/ops
          (for-syntax racket/base (only-in racket/string string-prefix?)
                      "private/word-break-categories.rkt" "private/sentence-break-categories.rkt")
-         "private/word-break-categories.rkt" "private/sentence-break-categories.rkt")
+         "private/word-break-categories.rkt" "private/sentence-break-categories.rkt" "private/eaw-categories.rkt")
 (require (filtered-in (lambda (name) (and (string-prefix? name "unsafe-fx") (substring name 7))) racket/unsafe/ops))
 (module+ test (require rackunit))
 
@@ -17,6 +17,8 @@
   [string-split-graphemes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof string?))]
   [string-split-graphemes/immutable (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof (and/c string? immutable?)))]
   [string-grapheme-indexes (->* (string?) (exact-nonnegative-integer? exact-nonnegative-integer?) (listof exact-nonnegative-integer?))]
+
+  [char-east-asian-width-property (-> char? symbol?)]
 
   [char-word-break-property (-> char? symbol?)]
   [string-word-break-at? (->* (string? exact-nonnegative-integer?) (exact-nonnegative-integer? exact-nonnegative-integer?) boolean?)]

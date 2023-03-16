@@ -11,7 +11,7 @@ Racket 8.7 added basic support for working with Unicode grapheme clusters, where
 
 The rules used are in accordance with Unicode 14.0, to match Racket 8.7.
 
-This is currently very much a work in progress, and not tested very well.
+This is currently very much a work in progress.
 
 @section{Grapheme Breaks}
 
@@ -137,5 +137,13 @@ Same as @code{string-split-sentencess}, but returns immutable strings.
          (listof exact-nonnegative-integer?)]{
 
 Returns a list of the indexes of the start of each sentence  in the specified range of @code{str}. It is undefined if @code{start} is not the initial index of a sentence.
+
+}
+
+@section{Other functions}
+
+@defproc[(char-east-asian-width-property [ch char?]) (or/c 'N 'Na 'H 'A 'F 'W)]{
+
+ Returns the @hyperlink["https://www.unicode.org/reports/tr11/tr11-39.html"]{Annex #11 East Asian Width} property assigned to the given character.
 
 }
