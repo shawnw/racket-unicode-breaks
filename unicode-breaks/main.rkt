@@ -118,12 +118,12 @@
   (let ([vec (cache-vec c)])
     (if vec
         (unsafe-vector-ref vec (fx- i (cache-start c)))
-        ((cache-func c) (unsafe-string-ref (cache-str c) i)))))
+        ((cache-func c) (string-ref (cache-str c) i)))))
 
 (define (string-skip/with-cache str pred? start end break-cache)
   (cond
     [(fx= start end) #f]
-    [(pred? (unsafe-string-ref str start) (cache-property-ref break-cache start))
+    [(pred? (string-ref str start) (cache-property-ref break-cache start))
      (string-skip/with-cache str pred? (fx+ start 1) end break-cache)]
     [else start]))
 
@@ -131,7 +131,7 @@
   (let ([endm1 (fx- end 1)])
     (cond
       [(fx= start end) #f]
-      [(pred? (unsafe-string-ref str endm1) (cache-property-ref break-cache endm1))
+      [(pred? (string-ref str endm1) (cache-property-ref break-cache endm1))
        (string-skip-right/with-cache str pred? start endm1 break-cache)]
       [else (fx- end 1)])))
 
@@ -211,9 +211,9 @@
 (define (%string-word-break-at? str i start end bc)
   (if (or (fx= i start) (fx= i end))
       #t; WB1,2
-      (let* ([before-ch (unsafe-string-ref str (fx- i 1))]
+      (let* ([before-ch (string-ref str (fx- i 1))]
              [before (cache-property-ref bc (fx- i 1))]
-             [after-ch (unsafe-string-ref str i)]
+             [after-ch (string-ref str i)]
              [after (cache-property-ref bc i)])
         (cond
           [(and (word-equals before is CR) (word-equals after is LF)) #f] ; WB3
@@ -224,16 +224,16 @@
           [(word-equals after in Format Extend ZWJ) #f] ; WB4
           [else
            (let* ([before-idx (prev-non-ef-idx str i start bc)] ; WB4 ignore rules
-                  [before-ch (if before-idx (unsafe-string-ref str before-idx) before-ch)]
+                  [before-ch (if before-idx (string-ref str before-idx) before-ch)]
                   [before (if (and before-idx (not (fx= before-idx (fx- i 1)))) (cache-property-ref bc before-idx) before)]
                   [after-idx (next-non-ef-idx str i end bc)]
-                  [after-ch (and after-idx (unsafe-string-ref str after-idx))]
+                  [after-ch (and after-idx (string-ref str after-idx))]
                   [after (if (and after-ch (not (fx= after-idx i))) (cache-property-ref bc after-idx) after)]
                   [next-before-idx (and before-idx (fx>= (fx- before-idx 1) start) (prev-non-ef-idx str before-idx start bc))]
-                  [next-before-ch (and next-before-idx (unsafe-string-ref str next-before-idx))]
+                  [next-before-ch (and next-before-idx (string-ref str next-before-idx))]
                   [next-before (and next-before-idx (cache-property-ref bc next-before-idx))]
                   [next-after-idx (and (fx< (fx+ after-idx 1) end) (next-non-ef-idx str (fx+ after-idx 1) end bc))]
-                  [next-after-ch (and next-after-idx (unsafe-string-ref str next-after-idx))]
+                  [next-after-ch (and next-after-idx (string-ref str next-after-idx))]
                   [next-after (and next-after-idx (cache-property-ref bc next-after-idx))])
              #;(printf "next-before-idx: ~S next-before-ch: ~S next-before: ~S~%before-idx: ~S before-ch: ~S before: ~S~%after-idx: ~S after-ch: ~S after: ~S~%next-after-idx: ~S next-after-ch: ~S next-after: ~S~%"
                      next-before-idx next-before-ch next-before before-idx before-ch before after-idx after-ch after next-after-idx next-after-ch next-after)
@@ -374,9 +374,9 @@
 (define (%string-sentence-break-at? str i start end bc)
   (if (or (fx= i start) (fx= i end))
       #t; SB1,2
-      (let* ([before-ch (unsafe-string-ref str (fx- i 1))]
+      (let* ([before-ch (string-ref str (fx- i 1))]
              [before (cache-property-ref bc (fx- i 1))]
-             [after-ch (unsafe-string-ref str i)]
+             [after-ch (string-ref str i)]
              [after (cache-property-ref bc i)])
         (cond
           [(and (sentence-equals before is CR) (sentence-equals after is LF)) #f] ; SB3
@@ -384,16 +384,16 @@
           [(sentence-equals after in Format Extend) #f] ; SB5
           [else
            (let* ([before-idx (prev-non-sef-idx str i start bc)] ; SB5 ignore rules
-                  [before-ch (if before-idx (unsafe-string-ref str before-idx) before-ch)]
+                  [before-ch (if before-idx (string-ref str before-idx) before-ch)]
                   [before (if (and before-idx (not (fx= before-idx (fx- i 1)))) (cache-property-ref bc before-idx) before)]
                   [after-idx (next-non-sef-idx str i end bc)]
-                  [after-ch (and after-idx (unsafe-string-ref str after-idx))]
+                  [after-ch (and after-idx (string-ref str after-idx))]
                   [after (if (and after-idx (not (fx= after-idx i))) (cache-property-ref bc after-idx) after)]
                   [next-before-idx (and before-idx (fx>= (fx- before-idx 1) start) (prev-non-sef-idx str before-idx start bc))]
-                  [next-before-ch (and next-before-idx (unsafe-string-ref str next-before-idx))]
+                  [next-before-ch (and next-before-idx (string-ref str next-before-idx))]
                   [next-before (and next-before-idx (cache-property-ref bc next-before-idx))]
                   [before-skip-close-sp-idx (and before-idx (prev-skip-close-sp str before-idx start bc))]
-                  [before-skip-close-sp-ch (and before-skip-close-sp-idx (unsafe-string-ref str before-skip-close-sp-idx))]
+                  [before-skip-close-sp-ch (and before-skip-close-sp-idx (string-ref str before-skip-close-sp-idx))]
                   [before-skip-close-sp (and before-skip-close-sp-idx (cache-property-ref bc before-skip-close-sp-idx))])
              #;(printf "before-skip-close-sp-idx: ~S before-skip-close-sp-ch: ~S before-skip-close-sp: ~S~%next-before-idx: ~S next-before-ch: ~S next-before: ~S~%before-idx: ~S before-ch: ~S before: ~S~%after-idx: ~S after-ch: ~S after: ~S~%"
                        before-skip-close-sp-idx before-skip-close-sp-ch before-skip-close-sp next-before-idx next-before-ch next-before before-idx before-ch before after-idx after-ch after)
