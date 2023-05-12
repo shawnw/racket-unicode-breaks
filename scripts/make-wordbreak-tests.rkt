@@ -2,7 +2,7 @@
 
 (require net/url "common.rkt")
 
-(define wordbreak-tests-url (string->url "https://www.unicode.org/Public/14.0.0/ucd/auxiliary/WordBreakTest.txt"))
+(define wordbreak-tests-url (string->url "https://www.unicode.org/Public/15.0.0/ucd/auxiliary/WordBreakTest.txt"))
 (define wordbreak-tests-file (string->path "WordBreakTest.txt"))
 (define destination-source-file (string->path "../unicode-breaks/private/word-break-tests.rkt"))
 

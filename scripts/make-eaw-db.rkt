@@ -4,7 +4,7 @@
 
 (require (prefix-in is- data/integer-set) racket/syntax net/url "common.rkt")
 
-(define word-break-properties-url (string->url "https://www.unicode.org/Public/14.0.0/ucd/EastAsianWidth.txt"))
+(define word-break-properties-url (string->url "https://www.unicode.org/Public/15.0.0/ucd/EastAsianWidth.txt"))
 (define word-break-properties-file (string->path "EastAsianWidth.txt"))
 (define destination-source-file (string->path "../unicode-breaks/private/eaw-categories.rkt"))
 
