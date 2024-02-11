@@ -7,11 +7,9 @@
 
 @defmodule[unicode-breaks]
 
-Racket 8.7 added basic support for working with Unicode grapheme clusters, where multiple codepoints make up an entity that is rendered as a single character. This module expands that functionality, and adds word and sentence breaks from @hyperlink["https://www.unicode.org/reports/tr29/tr29-39.html"]{Unicode Annex #29, Text Segmentation}. It does not attempt to provide language/locale specific algorithms.
+Racket 8.7 added basic support for working with Unicode grapheme clusters, where multiple codepoints make up an entity that is rendered as a single character. This module expands that functionality, and adds word and sentence breaks from @hyperlink["https://www.unicode.org/reports/tr29/tr29-41.html"]{Unicode Annex #29, Text Segmentation}. It does not attempt to provide language/locale specific algorithms.
 
-The rules used are in accordance with Unicode 14.0, to match Racket 8.7.
-
-This is currently very much a work in progress.
+The rules used are in accordance with Unicode 15.0, to match Racket 8.9.
 
 @section{Grapheme Breaks}
 
