@@ -6747,6 +6747,18 @@
  (string-word-break-indexes "ن‍ ")
  '(0 2 3))
 (test-equal?
+ "ٱلرَّحِيمِ \u06DD١: ÷ [0.2] ARABIC LETTER ALEF WASLA (ALetter) × [5.0] ARABIC LETTER LAM (ALetter) × [5.0] ARABIC LETTER REH (ALetter) × [4.0] ARABIC FATHA (Extend_FE) × [4.0] ARABIC SHADDA (Extend_FE) × [5.0] ARABIC LETTER HAH (ALetter) × [4.0] ARABIC KASRA (Extend_FE) × [5.0] ARABIC LETTER YEH (ALetter) × [5.0] ARABIC LETTER MEEM (ALetter) × [4.0] ARABIC KASRA (Extend_FE) ÷ [999.0] SPACE (WSegSpace) ÷ [999.0] ARABIC END OF AYAH (Numeric) × [8.0] ARABIC-INDIC DIGIT ONE (Numeric) ÷ [0.3]"
+ (string-word-break-indexes "ٱلرَّحِيمِ \u06DD١")
+ '(0 10 11 13))
+(test-equal?
+ "ܡܙܡܘܪܐ \u070Fܝܗ: ÷ [0.2] SYRIAC LETTER MIM (ALetter) × [5.0] SYRIAC LETTER ZAIN (ALetter) × [5.0] SYRIAC LETTER MIM (ALetter) × [5.0] SYRIAC LETTER WAW (ALetter) × [5.0] SYRIAC LETTER RISH (ALetter) × [5.0] SYRIAC LETTER ALAPH (ALetter) ÷ [999.0] SPACE (WSegSpace) ÷ [999.0] SYRIAC ABBREVIATION MARK (ALetter) × [5.0] SYRIAC LETTER YUDH (ALetter) × [5.0] SYRIAC LETTER HE (ALetter) ÷ [0.3]"
+ (string-word-break-indexes "ܡܙܡܘܪܐ \u070Fܝܗ")
+ '(0 6 7 10))
+(test-equal?
+ "ܬ\u070Fܫܒܘ: ÷ [0.2] SYRIAC LETTER TAW (ALetter) × [5.0] SYRIAC ABBREVIATION MARK (ALetter) × [5.0] SYRIAC LETTER SHIN (ALetter) × [5.0] SYRIAC LETTER BETH (ALetter) × [5.0] SYRIAC LETTER WAW (ALetter) ÷ [0.3]"
+ (string-word-break-indexes "ܬ\u070Fܫܒܘ")
+ '(0 5))
+(test-equal?
  "AAA: ÷ [0.2] LATIN CAPITAL LETTER A (ALetter) × [5.0] LATIN CAPITAL LETTER A (ALetter) × [5.0] LATIN CAPITAL LETTER A (ALetter) ÷ [0.3]"
  (string-word-break-indexes "AAA")
  '(0 3))

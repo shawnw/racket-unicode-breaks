@@ -1915,6 +1915,26 @@
  (string-sentence-break-indexes "!  ")
  '(0 3))
 (test-equal?
+ "a.: ÷ [0.2] LATIN SMALL LETTER A (Lower) × [998.0] FULL STOP (ATerm) ÷ [0.3]"
+ (string-sentence-break-indexes "a.")
+ '(0 2))
+(test-equal?
+ "a.\r\n: ÷ [0.2] LATIN SMALL LETTER A (Lower) × [998.0] FULL STOP (ATerm) × [9.0] <CARRIAGE RETURN (CR)> (CR) × [3.0] <LINE FEED (LF)> (LF) ÷ [0.3]"
+ (string-sentence-break-indexes "a.\r\n")
+ '(0 4))
+(test-equal?
+ "a.\r\n : ÷ [0.2] LATIN SMALL LETTER A (Lower) × [998.0] FULL STOP (ATerm) × [9.0] <CARRIAGE RETURN (CR)> (CR) × [3.0] <LINE FEED (LF)> (LF) ÷ [4.0] SPACE (Sp) ÷ [0.3]"
+ (string-sentence-break-indexes "a.\r\n ")
+ '(0 4 5))
+(test-equal?
+ "a.\r\na: ÷ [0.2] LATIN SMALL LETTER A (Lower) × [998.0] FULL STOP (ATerm) × [9.0] <CARRIAGE RETURN (CR)> (CR) × [3.0] <LINE FEED (LF)> (LF) ÷ [4.0] LATIN SMALL LETTER A (Lower) ÷ [0.3]"
+ (string-sentence-break-indexes "a.\r\na")
+ '(0 4 5))
+(test-equal?
+ "A.\r\nA: ÷ [0.2] LATIN CAPITAL LETTER A (Upper) × [998.0] FULL STOP (ATerm) × [9.0] <CARRIAGE RETURN (CR)> (CR) × [3.0] <LINE FEED (LF)> (LF) ÷ [4.0] LATIN CAPITAL LETTER A (Upper) ÷ [0.3]"
+ (string-sentence-break-indexes "A.\r\nA")
+ '(0 4 5))
+(test-equal?
  "\u2060(\u2060\"\u2060G\u2060o\u2060.\u2060\"\u2060)\u2060 \u2060(\u2060H\u2060e\u2060 \u2060d\u2060i\u2060d\u2060.\u2060)\u2060\u2060: ÷ [0.2] WORD JOINER (Format_FE) × [998.0] LEFT PARENTHESIS (Close) × [5.0] WORD JOINER (Format_FE) × [998.0] QUOTATION MARK (Close) × [5.0] WORD JOINER (Format_FE) × [998.0] LATIN CAPITAL LETTER G (Upper) × [5.0] WORD JOINER (Format_FE) × [998.0] LATIN SMALL LETTER O (Lower) × [5.0] WORD JOINER (Format_FE) × [998.0] FULL STOP (ATerm) × [5.0] WORD JOINER (Format_FE) × [9.0] QUOTATION MARK (Close) × [5.0] WORD JOINER (Format_FE) × [9.0] RIGHT PARENTHESIS (Close) × [5.0] WORD JOINER (Format_FE) × [9.0] SPACE (Sp) × [5.0] WORD JOINER (Format_FE) ÷ [11.0] LEFT PARENTHESIS (Close) × [5.0] WORD JOINER (Format_FE) × [998.0] LATIN CAPITAL LETTER H (Upper) × [5.0] WORD JOINER (Format_FE) × [998.0] LATIN SMALL LETTER E (Lower) × [5.0] WORD JOINER (Format_FE) × [998.0] SPACE (Sp) × [5.0] WORD JOINER (Format_FE) × [998.0] LATIN SMALL LETTER D (Lower) × [5.0] WORD JOINER (Format_FE) × [998.0] LATIN SMALL LETTER I (Lower) × [5.0] WORD JOINER (Format_FE) × [998.0] LATIN SMALL LETTER D (Lower) × [5.0] WORD JOINER (Format_FE) × [998.0] FULL STOP (ATerm) × [5.0] WORD JOINER (Format_FE) × [9.0] RIGHT PARENTHESIS (Close) × [5.0] WORD JOINER (Format_FE) × [5.0] WORD JOINER (Format_FE) ÷ [0.3]"
  (string-sentence-break-indexes
   "\u2060(\u2060\"\u2060G\u2060o\u2060.\u2060\"\u2060)\u2060 \u2060(\u2060H\u2060e\u2060 \u2060d\u2060i\u2060d\u2060.\u2060)\u2060\u2060")
@@ -2026,4 +2046,24 @@
  "\u2060!\u2060 \u2060 \u2060\u2060: ÷ [0.2] WORD JOINER (Format_FE) × [998.0] EXCLAMATION MARK (STerm) × [5.0] WORD JOINER (Format_FE) × [9.0] SPACE (Sp) × [5.0] WORD JOINER (Format_FE) × [10.0] SPACE (Sp) × [5.0] WORD JOINER (Format_FE) × [5.0] WORD JOINER (Format_FE) ÷ [0.3]"
  (string-sentence-break-indexes "\u2060!\u2060 \u2060 \u2060\u2060")
  '(0 8))
+(test-equal?
+ "\u2060a\u2060.\u2060\u2060: ÷ [0.2] WORD JOINER (Format_FE) × [998.0] LATIN SMALL LETTER A (Lower) × [5.0] WORD JOINER (Format_FE) × [998.0] FULL STOP (ATerm) × [5.0] WORD JOINER (Format_FE) × [5.0] WORD JOINER (Format_FE) ÷ [0.3]"
+ (string-sentence-break-indexes "\u2060a\u2060.\u2060\u2060")
+ '(0 6))
+(test-equal?
+ "\u2060a\u2060.\u2060\r\u2060\n\u2060: ÷ [0.2] WORD JOINER (Format_FE) × [998.0] LATIN SMALL LETTER A (Lower) × [5.0] WORD JOINER (Format_FE) × [998.0] FULL STOP (ATerm) × [5.0] WORD JOINER (Format_FE) × [9.0] <CARRIAGE RETURN (CR)> (CR) ÷ [4.0] WORD JOINER (Format_FE) × [998.0] <LINE FEED (LF)> (LF) ÷ [4.0] WORD JOINER (Format_FE) ÷ [0.3]"
+ (string-sentence-break-indexes "\u2060a\u2060.\u2060\r\u2060\n\u2060")
+ '(0 6 8 9))
+(test-equal?
+ "\u2060a\u2060.\u2060\r\u2060\n \u2060\u2060: ÷ [0.2] WORD JOINER (Format_FE) × [998.0] LATIN SMALL LETTER A (Lower) × [5.0] WORD JOINER (Format_FE) × [998.0] FULL STOP (ATerm) × [5.0] WORD JOINER (Format_FE) × [9.0] <CARRIAGE RETURN (CR)> (CR) ÷ [4.0] WORD JOINER (Format_FE) × [998.0] <LINE FEED (LF)> (LF) ÷ [4.0] SPACE (Sp) × [5.0] WORD JOINER (Format_FE) × [5.0] WORD JOINER (Format_FE) ÷ [0.3]"
+ (string-sentence-break-indexes "\u2060a\u2060.\u2060\r\u2060\n \u2060\u2060")
+ '(0 6 8 11))
+(test-equal?
+ "\u2060a\u2060.\u2060\r\u2060\na\u2060\u2060: ÷ [0.2] WORD JOINER (Format_FE) × [998.0] LATIN SMALL LETTER A (Lower) × [5.0] WORD JOINER (Format_FE) × [998.0] FULL STOP (ATerm) × [5.0] WORD JOINER (Format_FE) × [9.0] <CARRIAGE RETURN (CR)> (CR) ÷ [4.0] WORD JOINER (Format_FE) × [998.0] <LINE FEED (LF)> (LF) ÷ [4.0] LATIN SMALL LETTER A (Lower) × [5.0] WORD JOINER (Format_FE) × [5.0] WORD JOINER (Format_FE) ÷ [0.3]"
+ (string-sentence-break-indexes "\u2060a\u2060.\u2060\r\u2060\na\u2060\u2060")
+ '(0 6 8 11))
+(test-equal?
+ "\u2060A\u2060.\u2060\r\u2060\nA\u2060\u2060: ÷ [0.2] WORD JOINER (Format_FE) × [998.0] LATIN CAPITAL LETTER A (Upper) × [5.0] WORD JOINER (Format_FE) × [998.0] FULL STOP (ATerm) × [5.0] WORD JOINER (Format_FE) × [9.0] <CARRIAGE RETURN (CR)> (CR) ÷ [4.0] WORD JOINER (Format_FE) × [998.0] <LINE FEED (LF)> (LF) ÷ [4.0] LATIN CAPITAL LETTER A (Upper) × [5.0] WORD JOINER (Format_FE) × [5.0] WORD JOINER (Format_FE) ÷ [0.3]"
+ (string-sentence-break-indexes "\u2060A\u2060.\u2060\r\u2060\nA\u2060\u2060")
+ '(0 6 8 11))
 )

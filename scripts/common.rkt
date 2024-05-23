@@ -20,24 +20,34 @@
            (printf "Downloading ~A to ~A~%" (url->string url) (path->string filename))
            (copy-port in-port out-port)))))))
 
+(define (surrogate-pair-cp? x)
+  (<= #xD800 x #xDFFF))
+
 (define (read-unicode-tables)
   (for/fold ([tables (hasheq)])
             ([line (in-lines)])
     (match line
       [(pregexp #px"^([[:xdigit:]]{4,6})\\s*;\\s*([[:word:]]+)" (list _ num name))
-       (hash-update tables (string->symbol name)
-                    (lambda (cps) (is-union cps (is-make-range (string->number num 16))))
-                    is-make-range)]
+       (define cp (string->number num 16))
+       (if (surrogate-pair-cp? cp)
+           tables
+           (hash-update tables (string->symbol name)
+                        (lambda (cps) (is-union cps (is-make-range cp)))
+                        is-make-range))]
       [(pregexp #px"^([[:xdigit:]]{4,6})\\.\\.([[:xdigit:]]{4,6})\\s*;\\s([[:word:]]+)" (list _ begin end name))
-       (hash-update tables (string->symbol name)
-                    (lambda (cps) (is-union cps (is-make-range (string->number begin 16) (string->number end 16))))
-                    is-make-range)]
+       (define begin-cp (string->number begin 16))
+       (define end-cp (string->number end 16))
+       (if (and (surrogate-pair-cp? begin-cp) (surrogate-pair-cp? end-cp))
+           tables
+           (hash-update tables (string->symbol name)
+                        (lambda (cps) (is-union cps (is-make-range begin-cp end-cp)))
+                        is-make-range))]
       [_ tables])))
 
 (define (unicode-tables->vector tables)
   (let ([vec (for*/vector
-        ([(category cps) (in-hash tables)]
-         [range (in-list (is-integer-set-contents cps))])
+                 ([(category cps) (in-hash tables)]
+                  [range (in-list (is-integer-set-contents cps))])
                (char-range (integer->char (car range)) (integer->char (cdr range)) category))])
     (vector-sort! vec (lambda (a b) (char<? (char-range-upper a) (char-range-lower b))))
     vec))

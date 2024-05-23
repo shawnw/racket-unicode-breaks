@@ -1,7 +1,7 @@
 #lang racket/base
 
-;;; Unicode 14.0 Text Segmentation Annex #29 algorithms for Racket 8.7+
-;;; Copyright 2022 Shawn Wagner <shawnw.mobile@gmail.com>
+;;; Unicode 15.1 Text Segmentation Annex #29 algorithms for Racket 8.13+
+;;; Copyright 2022-2024 Shawn Wagner <shawnw.mobile@gmail.com>
 ;;; Released under MIT and Apache licenses; your choice.
 
 (require racket/contract racket/require racket/sequence racket/unsafe/ops

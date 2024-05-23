@@ -4,7 +4,7 @@
 
 (require (prefix-in is- data/integer-set) racket/syntax net/url "common.rkt")
 
-(define word-break-properties-url (string->url "https://www.unicode.org/Public/15.0.0/ucd/auxiliary/WordBreakProperty.txt"))
+(define word-break-properties-url (string->url "https://www.unicode.org/Public/15.1.0/ucd/auxiliary/WordBreakProperty.txt"))
 (define word-break-properties-file (string->path "WordBreakProperty.txt"))
 (define destination-source-file (string->path "../unicode-breaks/private/word-break-categories.rkt"))
 
